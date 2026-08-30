@@ -177,7 +177,13 @@ for f in tests/test_*.nim; do nim c -r --hints:off --path:src --path:tests "$f";
 
 Tests use `tests/helpers.nim` `tempCfg` (isolated `LocalDriver` in `getTempDir`) and avoid real `~/.myapp` or `curl`. Tier 1 pure resolver/git/helpers, Tier 2 isolated FS/DB, Tier 3 integration flagged out (local `file://` bare repos if needed).
 
-Clue still runs its own suite via `clue test` (14 tests).
+### Made with Datpkgr
+CLI apps that integrate with datpkgr:
+
+- [clue](https://github.com/openpeeps/clue) &bullet; an alternative package manager for Nim development
+- [tim engine](https://github.com/openpeeps/clue) &bullet; a DSL with built-in template engine, source-to-source transpialtion and more
+- [bro Stylesheets](https://github.com/openpeeps/bro) &bullet; An alternative to Dart SASS/SCSS fully written in Nim
+- [dfkup](https://github.com/dfkup/dfkup) &bullet; A scripting language made in Nim
 
 ## License
 
