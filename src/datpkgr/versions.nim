@@ -297,6 +297,30 @@ proc discoverVersions*(cfg: DatpkgrConfig, name, url: string, refresh = false,
     let cached = cfg.cachedVersions(name)
     if cached.len > 0:
       return cached
+  if cfg.isDevelopAvailable(name):
+    let devPath = cfg.developPath() / name
+    var realDev = devPath
+    try: realDev = expandSymlink(devPath)
+    except: discard
+    var mf = cfg.findManifestInDir(realDev)
+    if mf.len == 0:
+      mf = cfg.findManifestForDir(realDev)
+    if mf.len == 0:
+      mf = cfg.findManifestInDir(devPath)
+    if mf.len > 0:
+      try:
+        let content = readFile(mf)
+        let m = cfg.parseManifest(content, mf)
+        let verStr = if m.version.len > 0: m.version else: "0.0.0"
+        let ver = parseVersion(verStr)
+        result = @[DiscoveredVersion(version: ver, tag: "")]
+        cfg.cacheVersions(name, result)
+        return result
+      except: discard
+    # fallback: single 0.0.0 for develop without manifest version
+    result = @[DiscoveredVersion(version: newVersion(0, 0, 0), tag: "")]
+    cfg.cacheVersions(name, result)
+    return result
   let dest = cfg.pkgsCachePath() / name
   let relDest = relativePath(dest, cfg.rootPath)
   var existsDest = false
@@ -358,6 +382,12 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
   for pkg in pkgs:
     if pkg.name.len == 0 or result.hasKey(pkg.name):
       continue
+    if cfg.isDevelopAvailable(pkg.name):
+      let vers = cfg.discoverVersions(pkg.name, pkg.url, refresh)
+      result[pkg.name] = vers
+      if onDone != nil:
+        onDone(pkg.name, vers.len, true)
+      continue
     if not refresh:
       let cached = cfg.cachedVersions(pkg.name)
       if cached.len > 0:
@@ -386,6 +416,24 @@ proc headVersion*(cfg: DatpkgrConfig, name: string): Version =
   ## Version to register for a package with no semver tags: the version
   ## declared in its manifest (checked out at the default branch),
   ## or 0.0.0 when unknown. Uses the pluggable manifest entry.
+  # develop prioritized
+  if cfg.isDevelopAvailable(name):
+    let devPath = cfg.developPath() / name
+    var realDev = devPath
+    try: realDev = expandSymlink(devPath)
+    except: discard
+    var mf = cfg.findManifestInDir(realDev)
+    if mf.len == 0:
+      mf = cfg.findManifestForDir(realDev)
+    if mf.len == 0:
+      mf = cfg.findManifestInDir(devPath)
+    if mf.len > 0:
+      try:
+        let content = readFile(mf)
+        let m = cfg.parseManifest(content, mf)
+        if m.version.len > 0:
+          return parseVersion(m.version)
+      except: discard
   let dest = cfg.pkgsCachePath() / name
   var existsDest = false
   try: existsDest = cfg.driver.exists(relativePath(dest, cfg.rootPath))
@@ -393,6 +441,9 @@ proc headVersion*(cfg: DatpkgrConfig, name: string): Version =
   if not existsDest:
     let meta = cfg.fetchPkgMeta(name)
     if meta.isNone:
+      return newVersion(0, 0, 0)
+    if meta.get().url.len == 0:
+      # develop already handled above, but fallback
       return newVersion(0, 0, 0)
     if not cfg.clonePackage(meta.get().url, dest):
       return newVersion(0, 0, 0)
@@ -579,6 +630,42 @@ proc getDeps*(cfg: DatpkgrConfig, name, version: string, features: seq[string] =
         if meta.isSome:
           pkgUrl = meta.get().url
       if pkgUrl.len == 0:
+        if cfg.isDevelopAvailable(name):
+          let devPath = cfg.developPath() / name
+          var realDev = devPath
+          try: realDev = expandSymlink(devPath)
+          except: discard
+          var mf = cfg.findManifestInDir(realDev)
+          if mf.len == 0:
+            mf = cfg.findManifestForDir(realDev)
+          if mf.len == 0:
+            mf = cfg.findManifestInDir(devPath)
+          if mf.len > 0:
+            try:
+              let content = readFile(mf)
+              let m = cfg.parseManifest(content, mf)
+              proc isToolchainDep2(d: PkgDependency): bool =
+                d.isToolchain or d.name == cfg.toolchainName
+              for dep in m.dependencies:
+                if not isToolchainDep2(dep):
+                  deps.hard.add(dep)
+              for fname, fdeps in m.features:
+                var farr: seq[PkgDependency]
+                for dep in fdeps:
+                  if not isToolchainDep2(dep):
+                    farr.add(dep)
+                deps.features[fname] = farr
+              for dep in m.devDependencies:
+                if not isToolchainDep2(dep):
+                  deps.dev.add(dep)
+              cfg.cacheDeps(name, version, deps)
+            except: discard
+            result = deps.hard
+            for f in features:
+              if deps.features.hasKey(f):
+                for dep in deps.features[f]:
+                  result.add(dep)
+            return result
         cfg.logWarn("Unknown package in registry: " & name)
         return @[]
       if not cfg.clonePackage(pkgUrl, dest, refresh):

@@ -543,7 +543,19 @@ template withDatpkgrDB*(cfg: DatpkgrConfig, body: untyped) =
   cfg.initDatpkgr()
   body
 
+proc isDevelopAvailable*(cfg: DatpkgrConfig, pkgName: string): bool =
+  ## True if pkgName is available as develop (symlink). Driver-only to avoid circular import with install.
+  let rel = "develop" / pkgName
+  try:
+    if cfg.driver.isSymlink(rel) or cfg.driver.exists(rel):
+      return true
+  except: discard
+  false
+
 proc fetchPkgMeta*(cfg: DatpkgrConfig, pkgName: string, sourceFilter: string = ""): Option[PkgRef] =
+  # develop prioritized over registry
+  if cfg.isDevelopAvailable(pkgName):
+    return some(PkgRef(name: pkgName, url: "", refStr: ""))
   cfg.withDatpkgrDB do:
     let tbl = cfg.stores.db.getTable("packages").get()
     if sourceFilter.len > 0:

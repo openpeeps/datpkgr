@@ -180,19 +180,24 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         return false
       rootMeta = rootMetaOpt.get()
 
+    let isDevelopRoot = rootMeta.url.len == 0 and cfg.isDevelopAvailable(curName)
     var rootDest = cfg.pkgsCachePath() / curName
-    var rootExists = false
-    try: rootExists = cfg.driver.exists(relativePath(rootDest, cfg.rootPath))
-    except: rootExists = dirExists(rootDest)
-    if not rootExists:
-      progress("fetching " & curName & "...")
-      if not cfg.clonePackage(rootMeta.url, rootDest):
-        fail("Failed to fetch " & curName)
-        return false
+    if isDevelopRoot:
+      rootDest = cfg.developPath() / curName
+      progress("using develop " & curName)
     else:
-      progress("using cached " & curName)
-      if refresh:
-        discard cfg.clonePackage(rootMeta.url, rootDest, refresh = true)
+      var rootExists = false
+      try: rootExists = cfg.driver.exists(relativePath(rootDest, cfg.rootPath))
+      except: rootExists = dirExists(rootDest)
+      if not rootExists:
+        progress("fetching " & curName & "...")
+        if not cfg.clonePackage(rootMeta.url, rootDest):
+          fail("Failed to fetch " & curName)
+          return false
+      else:
+        progress("using cached " & curName)
+        if refresh:
+          discard cfg.clonePackage(rootMeta.url, rootDest, refresh = true)
 
     if url.len > 0:
       let nf = cfg.findManifestInDir(rootDest)
@@ -288,10 +293,14 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       var nextNames = initHashSet[string]()
       for name in expandQueue:
         let meta = pkgRefs.getOrDefault(name, PkgRef())
-        if meta.url.len == 0: continue
-        let versions = cfg.cachedVersions(name)
+        let isDevMeta = meta.url.len == 0 and cfg.isDevelopAvailable(name)
+        if meta.url.len == 0 and not isDevMeta: continue
+        let versions =
+          if isDevMeta: cfg.discoverVersions(name, "", refresh)
+          else: cfg.cachedVersions(name)
         let ver = if versions.len > 0: $versions[0].version else: "0.0.0"
-        for d in cfg.getDeps(name, ver, @[], refresh, meta.url):
+        let depsUrl = if isDevMeta: "" else: meta.url
+        for d in cfg.getDeps(name, ver, @[], refresh, depsUrl):
           let dn = depName(d)
           if dn.len == 0:
             if d.url.len > 0:
@@ -305,8 +314,10 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
             else:
               let m = cfg.fetchPkgMeta(dn)
               if m.isSome: dmeta = m.get()
+              elif cfg.isDevelopAvailable(dn):
+                dmeta = PkgRef(name: dn, url: "", refStr: "")
             pkgRefs[dn] = dmeta
-          if dmeta.url.len == 0:
+          if dmeta.url.len == 0 and not cfg.isDevelopAvailable(dn):
             warn("Unknown package in registry, skipping: " & dn)
             continue
           if d.branch.len > 0 or d.tag.len > 0:
@@ -352,7 +363,9 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     var activeFeatOf = initTable[string, seq[string]]()
     proc provider(name: string, version: Version, feats: seq[string]): seq[Dependency] =
       activeFeatOf[name] = feats
-      let deps = cfg.getDeps(name, $version, feats, refresh, pkgRefs.getOrDefault(name).url)
+      let isDevProvider = cfg.isDevelopAvailable(name)
+      let providerUrl = if isDevProvider: "" else: pkgRefs.getOrDefault(name).url
+      let deps = cfg.getDeps(name, $version, feats, refresh, providerUrl)
       result = @[]
       for d in deps:
         let dn = depName(d)
@@ -370,8 +383,20 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
             if m.isSome:
               meta = m.get()
               pkgRefs[dn] = meta
-        if meta.url.len == 0:
+            elif cfg.isDevelopAvailable(dn):
+              meta = PkgRef(name: dn, url: "", refStr: "")
+              pkgRefs[dn] = meta
+        if meta.url.len == 0 and not cfg.isDevelopAvailable(dn):
           warn("Unknown package in registry, skipping: " & dn)
+          continue
+        if cfg.isDevelopAvailable(dn):
+          # ensure registry has at least the develop version
+          if not registry.hasKey(dn):
+            let devVers = cfg.discoverVersions(dn, "", refresh)
+            for v in devVers:
+              registry.addPackage(UnresolvedPackage(name: dn, version: v.version, dependencies: @[]))
+            registered.incl(dn)
+          result.add(Dependency(name: dn, constraint: d.constraint, features: d.features))
           continue
         if d.branch.len > 0 or d.tag.len > 0:
           var m = meta
@@ -483,6 +508,10 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       let verStr =
         if meta.refStr.len > 0: meta.refStr
         else: $rp.version
+      if cfg.isDevelopAvailable(rp.name):
+        installedCount.inc
+        installedLabels.add(rp.name & "@" & verStr & " (develop)")
+        continue
       cfg.logDebug("install: " & rp.name & "@" & verStr)
       let cacheDir = cfg.pkgsCachePath() / rp.name
       var hasCache = false
@@ -569,6 +598,8 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
           warn("Failed to install " & jobs[i].name & " v" & jobs[i].verStr)
 
     for rp in resolution.packages:
+      if cfg.isDevelopAvailable(rp.name):
+        continue
       let meta = pkgRefs.getOrDefault(rp.name, PkgRef())
       let verStr = if meta.refStr.len > 0: meta.refStr else: $rp.version
       let feats = activeFeatOf.getOrDefault(rp.name)
