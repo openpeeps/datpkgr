@@ -168,12 +168,22 @@ proc safeRemoveDir*(cfg: DatpkgrConfig, dir: string) =
   if not cfg.isInsidePkgs(dir):
     cfg.logDebug("refusing to remove outside packages: " & dir)
     return
-  if dirExists(dir):
-    try: removeDir(dir) except: discard
+  try:
+    if cfg.driver.exists(dir):
+      cfg.driver.deleteDir(dir, force = true)
+  except CatchableError:
+    discard
 
 proc safeRemoveSymlink*(cfg: DatpkgrConfig, p: string) =
   if not cfg.isInsideDevelop(p):
     cfg.logDebug("refusing to remove outside develop: " & p)
     return
-  if symlinkExists(p):
-    try: removeFile(p) except: discard
+  try:
+    if cfg.driver.isSymlink(p):
+      try:
+        cfg.driver.delete(p)
+      except CatchableError:
+        try: cfg.driver.deleteDir(p, force = true)
+        except CatchableError: discard
+  except CatchableError:
+    discard

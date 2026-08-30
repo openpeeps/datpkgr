@@ -82,7 +82,9 @@ suite "config — safeRemove guards":
     defer:
       removeDir(target)
       if symlinkExists(link):
-        try: removeFile(link) except: discard
+        try: removeFile(link)
+        except OSError:
+          try: removeDir(link) except OSError: discard
     createSymlink(target, link)
     cfg.safeRemoveSymlink(link)
     check symlinkExists(link)
@@ -93,7 +95,12 @@ suite "config — safeRemove guards":
     discard existsOrCreateDir(cfg.developPath())
     let target = getTempDir() / "datpkgr_develop_target" / $getCurrentProcessId()
     createDir(target)
-    defer: removeDir(target)
+    defer:
+      if symlinkExists(cfg.developPath() / "mydev"):
+        try: removeFile(cfg.developPath() / "mydev")
+        except OSError:
+          try: removeDir(cfg.developPath() / "mydev") except OSError: discard
+      removeDir(target)
     let link = cfg.developPath() / "mydev"
     createSymlink(target, link)
     check symlinkExists(link)
@@ -121,18 +128,19 @@ suite "config — manifest finders":
     check found.extractFilename == "spry.nimble"
 
   test "callbacks are invoked":
+    var captured {.global.}: seq[string]
+    captured = @[]
     let cfg = tempCfg()
     defer: cleanupCfg(cfg)
-    let tmpPath = "/tmp/datpkgr_cb_test.log"
-    try: removeFile(tmpPath) except: discard
-    defer: removeFile(tmpPath)
     cfg.callbacks.log = proc(lvl: LogLevel, msg: string) {.gcsafe.} =
       try:
-        let f = open("/tmp/datpkgr_cb_test.log", fmAppend)
-        f.writeLine($lvl & ":" & msg)
-        f.close()
+        {.cast(gcsafe).}:
+          captured.add($lvl & ":" & msg)
       except: discard
     cfg.debugEnabled = true
     cfg.logDebug("hello")
-    let content = readFile(tmpPath)
-    check "hello" in content
+    var found = false
+    {.cast(gcsafe).}:
+      for m in captured:
+        if "hello" in m: found = true
+    check found
