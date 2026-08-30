@@ -1,5 +1,4 @@
 <p align="center">
-  <img src="https://github.com/openpeeps/PKG/blob/main/.github/logo.png" width="90px"><br>
   <b>datpkgr</b>, app-agnostic package manager kit<br>
   Language-agnostic core for building package managers. Written in Nim.
 </p>
