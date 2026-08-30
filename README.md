@@ -180,8 +180,8 @@ Tests use `tests/helpers.nim` `tempCfg` (isolated `LocalDriver` in `getTempDir`)
 CLI apps that integrate with datpkgr:
 
 - [clue](https://github.com/openpeeps/clue) &bullet; an alternative package manager for Nim development
-- [tim engine](https://github.com/openpeeps/clue) &bullet; a DSL with built-in template engine, source-to-source transpialtion and more
-- [bro Stylesheets](https://github.com/openpeeps/bro) &bullet; An alternative to Dart SASS/SCSS fully written in Nim
+- [tim engine](https://github.com/tim-engine/tim) &bullet; a DSL with built-in template engine, source-to-source transpialtion and more
+- [bro stylesheets](https://github.com/openpeeps/bro) &bullet; An alternative to Dart SASS/SCSS fully written in Nim
 - [dfkup](https://github.com/dfkup/dfkup) &bullet; A scripting language made in Nim
 
 ## License
