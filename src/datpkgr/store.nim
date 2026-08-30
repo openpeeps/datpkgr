@@ -41,7 +41,7 @@ proc loadSources*(cfg: DatpkgrConfig): seq[Source] =
   try:
     let content = cfg.fs.read(cfg.sourcesPath())
     let j = fromJson(content)
-    let arr = if j.hasKey("sources"): j["sources"] else: j
+    let arr = if j.kind == JObject and j.hasKey("sources"): j["sources"] else: j
     if arr.kind != JArray:
       cfg.logWarn("Invalid sources.json: expected array, using default")
       return @[Source(name: cfg.defaultSourceName, url: cfg.defaultRegistryUrl)]
