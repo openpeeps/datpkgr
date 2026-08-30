@@ -165,17 +165,6 @@ discard cfg.checkoutTag("/tmp/dest", "v1.0.0")
 
 `src/datpkgr.nim` re-exports all eight.
 
-## Testing
-
-```bash
-# run datpkgr suite (89 tests, no network)
-nimble test
-# or manually
-for f in tests/test_*.nim; do nim c -r --hints:off --path:src --path:tests "$f"; done
-```
-
-Tests use `tests/helpers.nim` `tempCfg` (isolated `LocalDriver` in `getTempDir`) and avoid real `~/.myapp` or `curl`. Tier 1 pure resolver/git/helpers, Tier 2 isolated FS/DB, Tier 3 integration flagged out (local `file://` bare repos if needed).
-
 ### Made with Datpkgr
 CLI apps that integrate with datpkgr:
 

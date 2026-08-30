@@ -183,31 +183,56 @@ proc resolveDepPathLike*(cfg: DatpkgrConfig, name: string): string =
   ## Locate the latest installed version dir for a package on disk (fallback
   ## for legacy installs that predate the recorded `path` column).
   let base = cfg.pkgsPath() / name
-  if not dirExists(base): return ""
+  let relBase = relativePath(base, cfg.rootPath)
+  var hasBase = false
+  try: hasBase = cfg.driver.exists(relBase)
+  except: hasBase = dirExists(base)
+  if not hasBase: return ""
   var best = ""
   var bestVer = newVersion(0, 0, 0)
-  for entry in walkDir(base):
-    if entry.kind == pcDir:
+  try:
+    for meta in cfg.driver.list(relBase):
+      if not meta.isDir: continue
+      let entryPath = cfg.rootPath / meta.path
       try:
-        let v = parseVersion(entry.path.extractFilename)
+        let v = parseVersion(entryPath.extractFilename)
         if v > bestVer:
           bestVer = v
-          best = entry.path
-      except CatchableError:
-        discard
+          best = entryPath
+      except CatchableError: discard
+  except:
+    for entry in walkDir(base):
+      if entry.kind == pcDir:
+        try:
+          let v = parseVersion(entry.path.extractFilename)
+          if v > bestVer:
+            bestVer = v
+            best = entry.path
+        except CatchableError: discard
   best
 
 proc pathForImports*(cfg: DatpkgrConfig, p: string): string =
   let mf = cfg.findManifestInDir(p)
   if mf.len > 0:
     try:
-      let m = cfg.parseManifest(readFile(mf), mf)
+      let content =
+        if mf.startsWith(cfg.rootPath & DirSep):
+          try: cfg.driver.read(relativePath(mf, cfg.rootPath))
+          except: readFile(mf)
+        else: readFile(mf)
+      let m = cfg.parseManifest(content, mf)
       var srcDir = ""
       if m.extra != nil and m.extra.hasKey("srcDir"):
         srcDir = m.extra["srcDir"].getStr
       let src = if srcDir.len > 0: srcDir else: "src"
-      if dirExists(p / src):
-        return p / src
+      let srcAbs = p / src
+      var hasSrc = false
+      if srcAbs.startsWith(cfg.rootPath & DirSep):
+        try: hasSrc = cfg.driver.exists(relativePath(srcAbs, cfg.rootPath))
+        except: hasSrc = dirExists(srcAbs)
+      else: hasSrc = dirExists(srcAbs)
+      if hasSrc:
+        return srcAbs
     except CatchableError:
       discard
   p
@@ -314,11 +339,20 @@ proc pruneOrphans*(cfg: DatpkgrConfig, verbose = true) =
       let dir = cfg.pkgsPath() / name / ver
       cfg.safeRemoveDir(dir)
       let parentDir = cfg.pkgsPath() / name
-      if dirExists(parentDir):
+      let relParent = relativePath(parentDir, cfg.rootPath)
+      var hasParent = false
+      try: hasParent = cfg.driver.exists(relParent)
+      except: hasParent = dirExists(parentDir)
+      if hasParent:
         var hasEntries = false
-        for e in walkDir(parentDir):
-          hasEntries = true
-          break
+        try:
+          for meta in cfg.driver.list(relParent):
+            hasEntries = true
+            break
+        except:
+          for e in walkDir(parentDir):
+            hasEntries = true
+            break
         if not hasEntries:
           cfg.safeRemoveDir(parentDir)
       for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():

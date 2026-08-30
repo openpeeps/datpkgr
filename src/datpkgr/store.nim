@@ -93,8 +93,13 @@ proc seedPackagesTableDefault*(cfg: DatpkgrConfig, registryPackages: JsonNode): 
 proc manifestCanonicalName(cfg: DatpkgrConfig, manifestPath: string): string =
   ## Language-agnostic package name from manifest. Tries parsed manifest
   ## `name` field first, falls back to filename without extension.
+  ## Uses flysystem when inside driver root.
   try:
-    let content = readFile(manifestPath)
+    let content =
+      if manifestPath.startsWith(cfg.rootPath & DirSep):
+        try: cfg.driver.read(relativePath(manifestPath, cfg.rootPath))
+        except: readFile(manifestPath)
+      else: readFile(manifestPath)
     let m = cfg.parseManifest(content, manifestPath)
     if m.name.len > 0:
       return m.name
@@ -177,17 +182,33 @@ proc initDatpkgr*(cfg: DatpkgrConfig) =
 
   block:
     let cachePath = cfg.pkgsCachePath()
-    if dirExists(cachePath):
-      for kind, path in walkDir(cachePath):
-        if kind != pcDir: continue
+    let relCachePath = relativePath(cachePath, cfg.rootPath)
+    var hasCache = false
+    try: hasCache = cfg.driver.exists(relCachePath)
+    except: hasCache = dirExists(cachePath)
+    if hasCache:
+      var entries: seq[string]
+      try:
+        for meta in cfg.driver.list(relCachePath):
+          if meta.isDir: entries.add(cfg.rootPath / meta.path)
+      except:
+        for kind, path in walkDir(cachePath):
+          if kind == pcDir: entries.add(path)
+      for path in entries:
         let dirName = path.extractFilename
         var nf = cfg.findManifestInDir(path)
         if nf.len == 0: continue
         let canonical = cfg.manifestCanonicalName(nf)
         if canonical.len == 0 or canonical == dirName: continue
         let canonicalPath = cachePath / canonical
-        if not dirExists(canonicalPath):
-          try: moveDir(path, canonicalPath) except: discard
+        let relCanonical = relativePath(canonicalPath, cfg.rootPath)
+        var hasCanonical = false
+        try: hasCanonical = cfg.driver.exists(relCanonical)
+        except: hasCanonical = dirExists(canonicalPath)
+        if not hasCanonical:
+          try: cfg.driver.moveDir(relativePath(path, cfg.rootPath), relCanonical)
+          except:
+            try: moveDir(path, canonicalPath) except: discard
         try:
           let tbl = cfg.stores.db.getTable("packages").get()
           if tbl.where("name", newTextValue(canonical)).toSeq().len == 0:
@@ -228,7 +249,13 @@ proc initDatpkgr*(cfg: DatpkgrConfig) =
           for (pk, row) in tbl.allRows():
             let oldName = row["name"].strVal
             let oldPath = row["path"].strVal
-            if oldPath.len == 0 or not dirExists(oldPath): continue
+            var hasOld = false
+            if oldPath.len > 0:
+              if oldPath.startsWith(cfg.rootPath & DirSep):
+                try: hasOld = cfg.driver.exists(relativePath(oldPath, cfg.rootPath))
+                except: hasOld = dirExists(oldPath)
+              else: hasOld = dirExists(oldPath)
+            if oldPath.len == 0 or not hasOld: continue
             var nf = cfg.findManifestInDir(oldPath)
             if nf.len == 0:
               let base = oldPath.parentDir()
@@ -241,8 +268,18 @@ proc initDatpkgr*(cfg: DatpkgrConfig) =
           for item in toMigrate:
             let baseOld = cfg.pkgsPath() / item.row["name"].strVal
             let baseNew = cfg.pkgsPath() / item.canonical
-            if dirExists(baseOld) and not dirExists(baseNew):
-              try: moveDir(baseOld, baseNew) except: discard
+            let relOld = relativePath(baseOld, cfg.rootPath)
+            let relNew = relativePath(baseNew, cfg.rootPath)
+            var hasOld = false
+            var hasNew = false
+            try: hasOld = cfg.driver.exists(relOld)
+            except: hasOld = dirExists(baseOld)
+            try: hasNew = cfg.driver.exists(relNew)
+            except: hasNew = dirExists(baseNew)
+            if hasOld and not hasNew:
+              try: cfg.driver.moveDir(relOld, relNew)
+              except:
+                try: moveDir(baseOld, baseNew) except: discard
             discard cfg.stores.db.deleteRow("installed", item.pk)
             var r = item.row
             r["name"] = newTextValue(item.canonical)
@@ -252,9 +289,18 @@ proc initDatpkgr*(cfg: DatpkgrConfig) =
             cfg.stores.db.checkpoint()
       except: discard
 
-    if dirExists(cachePath):
-      for kind, path in walkDir(cachePath):
-        if kind != pcDir: continue
+    var hasCache2 = false
+    try: hasCache2 = cfg.driver.exists(relCachePath)
+    except: hasCache2 = dirExists(cachePath)
+    if hasCache2:
+      var entries2: seq[string]
+      try:
+        for meta in cfg.driver.list(relCachePath):
+          if meta.isDir: entries2.add(cfg.rootPath / meta.path)
+      except:
+        for kind, path in walkDir(cachePath):
+          if kind == pcDir: entries2.add(path)
+      for path in entries2:
         var nf = cfg.findManifestInDir(path)
         if nf.len == 0: continue
         let canonical = cfg.manifestCanonicalName(nf)
@@ -401,11 +447,16 @@ proc initDatpkgr*(cfg: DatpkgrConfig) =
             quoteShell(tmpFull) & " " & quoteShell(src.url))
           if exitCode != 0:
             raise newException(IOError, "curl failed: " & output)
-          registryPackages = fromJson(readFile(tmpFull))
-          if cfg.driver.exists(tmpFile):
-            cfg.driver.move(tmpFile, cacheFile)
-          else:
-            moveFile(tmpFull, cfg.rootPath / cacheFile)
+          try: registryPackages = fromJson(cfg.driver.read(tmpFile))
+          except: registryPackages = fromJson(readFile(tmpFull))
+          var moved = false
+          try:
+            if cfg.driver.exists(tmpFile):
+              cfg.driver.move(tmpFile, cacheFile)
+              moved = true
+          except: discard
+          if not moved:
+            try: moveFile(tmpFull, cfg.rootPath / cacheFile) except: discard
           cfg.logInfo("Downloaded registry for " & src.name)
           gotData = true
         except CatchableError as e:
@@ -442,15 +493,21 @@ proc refreshSource*(cfg: DatpkgrConfig, sourceName: string): bool =
       return false
     var registryPackages: JsonNode
     try:
-      registryPackages = fromJson(readFile(tmpFull))
+      try: registryPackages = fromJson(cfg.driver.read(tmpFile))
+      except: registryPackages = fromJson(readFile(tmpFull))
     except CatchableError:
-      removeFile(tmpFull)
+      try: removeFile(tmpFull) except: discard
+      try: cfg.driver.delete(tmpFile) except: discard
       cfg.logError("Failed to parse registry for " & src.name & ": " & getCurrentExceptionMsg())
       return false
-    if cfg.driver.exists(tmpFile):
-      cfg.driver.move(tmpFile, cacheFile)
-    else:
-      moveFile(tmpFull, cacheFull)
+    var moved2 = false
+    try:
+      if cfg.driver.exists(tmpFile):
+        cfg.driver.move(tmpFile, cacheFile)
+        moved2 = true
+    except: discard
+    if not moved2:
+      try: moveFile(tmpFull, cacheFull) except: discard
     if src.name == cfg.defaultSourceName:
       try:
         createDir(cfg.legacyRegistryPath.parentDir())

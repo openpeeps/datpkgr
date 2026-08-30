@@ -111,19 +111,41 @@ proc findManifestForDir*(cfg: DatpkgrConfig, dir: string): string =
 proc findManifestInDir*(cfg: DatpkgrConfig, dir: string): string =
   ## Only checks `dir` itself (no walk-up), used for cache/install dirs.
   ## Skips the toolchain's own entry file when `toolchainName` is configured.
+  ## Uses flysystem when `dir` is inside the driver root, otherwise raw.
   let pattern = cfg.manifestNameForPkg("*")
   let toolchainEntry =
     if cfg.toolchainName.len > 0: cfg.manifestNameForPkg(cfg.toolchainName)
     else: ""
-  if "*" in pattern:
-    for f in walkFiles(dir / pattern):
-      if toolchainEntry.len > 0 and f.extractFilename == toolchainEntry:
-        continue
-      return f
+  # Inside-driver paths use flysystem; outside (e.g. /tmp, user project) use raw
+  let inside = dir.startsWith(cfg.rootPath & DirSep) or dir == cfg.rootPath
+  if inside:
+    let relDir = relativePath(dir, cfg.rootPath)
+    if "*" in pattern:
+      try:
+        let relPattern = relDir / pattern
+        for rel in cfg.driver.search(relPattern):
+          let f = cfg.rootPath / rel
+          if toolchainEntry.len > 0 and f.extractFilename == toolchainEntry:
+            continue
+          return f
+      except CatchableError: discard
+    else:
+      let cand = dir / pattern
+      let relCand = relativePath(cand, cfg.rootPath)
+      try:
+        if cfg.driver.exists(relCand):
+          return cand
+      except CatchableError: discard
   else:
-    let cand = dir / pattern
-    if fileExists(cand):
-      return cand
+    if "*" in pattern:
+      for f in walkFiles(dir / pattern):
+        if toolchainEntry.len > 0 and f.extractFilename == toolchainEntry:
+          continue
+        return f
+    else:
+      let cand = dir / pattern
+      if fileExists(cand):
+        return cand
   ""
 
 proc parseManifest*(cfg: DatpkgrConfig, content: string, path: string): Manifest =
@@ -168,22 +190,20 @@ proc safeRemoveDir*(cfg: DatpkgrConfig, dir: string) =
   if not cfg.isInsidePkgs(dir):
     cfg.logDebug("refusing to remove outside packages: " & dir)
     return
+  let rel = relativePath(dir, cfg.rootPath)
   try:
-    if cfg.driver.exists(dir):
-      cfg.driver.deleteDir(dir, force = true)
-  except CatchableError:
-    discard
+    if cfg.driver.exists(rel):
+      cfg.driver.deleteDir(rel, force = true)
+  except CatchableError as e:
+    cfg.logDebug("safeRemoveDir failed: " & e.msg)
 
 proc safeRemoveSymlink*(cfg: DatpkgrConfig, p: string) =
   if not cfg.isInsideDevelop(p):
     cfg.logDebug("refusing to remove outside develop: " & p)
     return
+  let rel = relativePath(p, cfg.rootPath)
   try:
-    if cfg.driver.isSymlink(p):
-      try:
-        cfg.driver.delete(p)
-      except CatchableError:
-        try: cfg.driver.deleteDir(p, force = true)
-        except CatchableError: discard
-  except CatchableError:
-    discard
+    if cfg.driver.isSymlink(rel) or cfg.driver.exists(rel):
+      cfg.driver.delete(rel)
+  except CatchableError as e:
+    cfg.logDebug("safeRemoveSymlink failed: " & e.msg)

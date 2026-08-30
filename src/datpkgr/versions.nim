@@ -54,6 +54,47 @@ proc findLocalTags(dest: string): seq[string] {.gcsafe.} =
         seen.incl(tag)
         result.add(tag)
 
+proc findLocalTags*(cfg: DatpkgrConfig, dest: string): seq[string] =
+  ## Driver-aware overload: uses flysystem when inside root, else raw.
+  let inside = dest.startsWith(cfg.rootPath & DirSep) or dest == cfg.rootPath
+  if inside:
+    var seen = initHashSet[string]()
+    let gitDir = dest / ".git"
+    let packedRefs = gitDir / "packed-refs"
+    let relPacked = relativePath(packedRefs, cfg.rootPath)
+    var packedContent = ""
+    var hasPacked = false
+    try:
+      if cfg.driver.exists(relPacked):
+        packedContent = cfg.driver.read(relPacked)
+        hasPacked = true
+    except: discard
+    if hasPacked:
+      for line in packedContent.splitLines():
+        let trimmed = line.strip()
+        if trimmed.len == 0 or trimmed.startsWith("#"): continue
+        let parts = trimmed.splitWhitespace()
+        if parts.len >= 2 and parts[1].startsWith("refs/tags/"):
+          var tag = parts[1]["refs/tags/".len .. ^1]
+          if tag.endsWith("^{}"): continue
+          if tag notin seen:
+            seen.incl(tag)
+            result.add(tag)
+    let refsDir = gitDir / "refs" / "tags"
+    let relRefsDir = relativePath(refsDir, cfg.rootPath)
+    try:
+      if cfg.driver.exists(relRefsDir):
+        for meta in cfg.driver.list(relRefsDir, recursive = true):
+          if meta.isDir: continue
+          let tag = relativePath(cfg.rootPath / meta.path, refsDir)
+          if tag.len > 0 and tag notin seen:
+            seen.incl(tag)
+            result.add(tag)
+    except: discard
+    return result
+  else:
+    return findLocalTags(dest)
+
 proc listRemoteTags(cfg: DatpkgrConfig, url: string): seq[string] =  ## List all tag refs on a git remote without cloning (SSH first, HTTPS
   ## fallback). Prompts are disabled so a dead URL fails fast, never blocks.
   var output: string
@@ -97,6 +138,21 @@ proc tagForVersion*(dest: string, version: string): string =
   except CatchableError:
     discard
   let tags = findLocalTags(dest)
+  if ("v" & version) in tags: return "v" & version
+  if version in tags: return version
+  ""
+
+proc tagForVersion*(cfg: DatpkgrConfig, dest: string, version: string): string =
+  ## Driver-aware overload.
+  try:
+    let want = parseVersion(version)
+    for tag in findLocalTags(cfg, dest):
+      let (ok, ver) = parseTag(tag)
+      if ok and ver == want:
+        return tag
+  except CatchableError:
+    discard
+  let tags = findLocalTags(cfg, dest)
   if ("v" & version) in tags: return "v" & version
   if version in tags: return version
   ""
@@ -168,6 +224,13 @@ proc installCleanCopy*(cacheDir, verDir: string, m: Manifest) =
         createDir(target.parentDir())
       copyFile(f, target)
 
+proc installCleanCopy*(cfg: DatpkgrConfig, cacheDir, verDir: string, m: Manifest) =
+  ## Flysystem-aware wrapper: ensures verDir via driver, then delegates to raw copy.
+  let relVerDir = relativePath(verDir, cfg.rootPath)
+  try: cfg.driver.makeDir(relVerDir)
+  except: createDir(verDir)
+  installCleanCopy(cacheDir, verDir, m)
+
 #
 # Versions cache (DB)
 #
@@ -235,14 +298,20 @@ proc discoverVersions*(cfg: DatpkgrConfig, name, url: string, refresh = false,
     if cached.len > 0:
       return cached
   let dest = cfg.pkgsCachePath() / name
-  if dirExists(dest):
+  let relDest = relativePath(dest, cfg.rootPath)
+  var existsDest = false
+  try: existsDest = cfg.driver.exists(relDest)
+  except: existsDest = dirExists(dest)
+  if existsDest:
     if refresh:
       discard cfg.refreshRemoteTags(dest, url, nonInteractive = true)
   elif cloneOnMiss:
     if not cfg.clonePackage(url, dest, refresh, nonInteractive = true):
       return @[]
+    try: existsDest = cfg.driver.exists(relDest)
+    except: existsDest = dirExists(dest)
   let tags =
-    if dirExists(dest): findLocalTags(dest)
+    if existsDest: findLocalTags(cfg, dest)
     else: cfg.listRemoteTags(url)
   result = discoverFromTags(name, tags)
   cfg.cacheVersions(name, result)
@@ -256,22 +325,23 @@ proc fetchTagsJob(job: TagFetchJob): tuple[name: string, tags: seq[string]] {.gc
   ## `refresh` is set — then lists its local git tags. Non-interactive so dead
   ## URLs fail fast. Never touches the DB.
   let dest = job.dest
-  if not dirExists(dest):
-    # use standalone git without cfg (global semaphore)
-    let env = gitEnv(nonInteractive = true)
-    var ok = false
-    # try SSH then HTTPS (duplicate cloneRepo logic without cfg)
-    var semWait = false
-    # Inline clone attempt using gitExec with a temp cfg
+  var existsDest = dirExists(dest)
+  let tmpCfgCheck = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(), debugEnabled = false)
+  try: existsDest = tmpCfgCheck.driver.exists(relativePath(dest, tmpCfgCheck.rootPath))
+  except: discard
+  if not existsDest:
     let tmpCfg = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(), debugEnabled = false)
     if tmpCfg.cloneRepo(job.url, dest, nonInteractive = true):
-      ok = true
-    if not ok:
+      discard
+    else:
       return (job.name, @[])
   elif job.refresh:
     let tmpCfg = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(), debugEnabled = false)
     discard tmpCfg.refreshRemoteTags(dest, job.url, nonInteractive = true)
-  let tags = findLocalTags(dest)
+  let tmpCfg2 = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(), debugEnabled = false)
+  let tags =
+    try: findLocalTags(tmpCfg2, dest)
+    except: findLocalTags(dest)
   (job.name, tags)
 
 proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh = false,
@@ -317,26 +387,39 @@ proc headVersion*(cfg: DatpkgrConfig, name: string): Version =
   ## declared in its manifest (checked out at the default branch),
   ## or 0.0.0 when unknown. Uses the pluggable manifest entry.
   let dest = cfg.pkgsCachePath() / name
-  if not dirExists(dest):
+  var existsDest = false
+  try: existsDest = cfg.driver.exists(relativePath(dest, cfg.rootPath))
+  except: existsDest = dirExists(dest)
+  if not existsDest:
     let meta = cfg.fetchPkgMeta(name)
     if meta.isNone:
       return newVersion(0, 0, 0)
     if not cfg.clonePackage(meta.get().url, dest):
       return newVersion(0, 0, 0)
   let manifestPath = cfg.findManifestInDir(dest)
-  if manifestPath.len > 0 and fileExists(manifestPath):
-    try:
-      let content = readFile(manifestPath)
-      let m = cfg.parseManifest(content, manifestPath)
-      if m.version.len > 0:
-        return parseVersion(m.version)
-    except CatchableError:
-      discard
-  # generic fallback via configured manifest name
+  if manifestPath.len > 0:
+    var hasMan = false
+    try: hasMan = cfg.driver.exists(relativePath(manifestPath, cfg.rootPath))
+    except: hasMan = fileExists(manifestPath)
+    if hasMan:
+      try:
+        let content =
+          try: cfg.driver.read(relativePath(manifestPath, cfg.rootPath))
+          except: readFile(manifestPath)
+        let m = cfg.parseManifest(content, manifestPath)
+        if m.version.len > 0:
+          return parseVersion(m.version)
+      except CatchableError:
+        discard
   let fallbackPath = dest / cfg.manifestNameForPkg(name)
-  if fileExists(fallbackPath):
+  var hasFall = false
+  try: hasFall = cfg.driver.exists(relativePath(fallbackPath, cfg.rootPath))
+  except: hasFall = fileExists(fallbackPath)
+  if hasFall:
     try:
-      let content = readFile(fallbackPath)
+      let content =
+        try: cfg.driver.read(relativePath(fallbackPath, cfg.rootPath))
+        except: readFile(fallbackPath)
       let m = cfg.parseManifest(content, fallbackPath)
       if m.version.len > 0:
         return parseVersion(m.version)
@@ -441,12 +524,19 @@ proc readManifestContent*(cfg: DatpkgrConfig, dest, name, version: string): stri
   ## Read a package version's manifest file via `git show` — no working-tree
   ## checkout. Uses `cfg.manifestNameForPkg` so the entry file is pluggable.
   let manifestName = cfg.manifestNameForPkg(name)
+  let tag =
+    if version == "0.0.0": ""
+    else:
+      let inside = dest.startsWith(cfg.rootPath & DirSep) or dest == cfg.rootPath
+      if inside:
+        try: tagForVersion(cfg, dest, version)
+        except: tagForVersion(dest, version)
+      else: tagForVersion(dest, version)
   let (output, exitCode) =
     if version == "0.0.0":
       cfg.gitExec("git -C " & dest & " show origin/" & cfg.defaultBranch(dest) & ":" &
         manifestName)
     else:
-      let tag = tagForVersion(dest, version)
       if tag.len == 0:
         return ""
       cfg.gitExec("git -C " & dest & " show " & tag & ":" & manifestName)
@@ -479,7 +569,10 @@ proc getDeps*(cfg: DatpkgrConfig, name, version: string, features: seq[string] =
     deps = cached.get
   else:
     let dest = cfg.pkgsCachePath() / name
-    if not dirExists(dest):
+    var existsDest = false
+    try: existsDest = cfg.driver.exists(relativePath(dest, cfg.rootPath))
+    except: existsDest = dirExists(dest)
+    if not existsDest:
       var pkgUrl = url
       if pkgUrl.len == 0:
         let meta = cfg.fetchPkgMeta(name)

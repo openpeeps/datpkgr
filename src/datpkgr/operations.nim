@@ -11,6 +11,7 @@ import std/[sequtils, options, tables, sets, strformat, strutils,
 import pkg/semver
 import pkg/openparser/json
 import pkg/malebolgia
+import pkg/flysystem
 
 import ./types
 import ./config
@@ -119,14 +120,23 @@ proc installResolvedPkg(job: InstallJob): bool {.gcsafe.} =
       discard checkoutTagRaw(job.cacheDir, tag)
   try:
     let m = manifestForJob(job)
-    installCleanCopy(job.cacheDir, job.verDir, m)
+    # Use flysystem when possible via tmpCfg derived from verDir root
+    try:
+      let tmpCfg = newDatpkgrConfig("datpkgr", job.verDir.parentDir().parentDir().parentDir(), debugEnabled = false)
+      installCleanCopy(tmpCfg, job.cacheDir, job.verDir, m)
+    except:
+      installCleanCopy(job.cacheDir, job.verDir, m)
     return true
   except CatchableError:
     return false
 
 proc manifestCanonicalName(cfg: DatpkgrConfig, manifestPath: string): string =
   try:
-    let content = readFile(manifestPath)
+    let content =
+      if manifestPath.startsWith(cfg.rootPath & DirSep):
+        try: cfg.driver.read(relativePath(manifestPath, cfg.rootPath))
+        except: readFile(manifestPath)
+      else: readFile(manifestPath)
     let m = cfg.parseManifest(content, manifestPath)
     if m.name.len > 0:
       return m.name
@@ -171,7 +181,10 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       rootMeta = rootMetaOpt.get()
 
     var rootDest = cfg.pkgsCachePath() / curName
-    if not dirExists(rootDest):
+    var rootExists = false
+    try: rootExists = cfg.driver.exists(relativePath(rootDest, cfg.rootPath))
+    except: rootExists = dirExists(rootDest)
+    if not rootExists:
       progress("fetching " & curName & "...")
       if not cfg.clonePackage(rootMeta.url, rootDest):
         fail("Failed to fetch " & curName)
@@ -188,15 +201,30 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         if canonical.len > 0 and canonical != curName:
           let canonicalDest = cfg.pkgsCachePath() / canonical
           if canonicalDest != rootDest:
-            if dirExists(canonicalDest):
-              try: removeDir(rootDest) except: discard
+            var hasCanonical = false
+            try: hasCanonical = cfg.driver.exists(relativePath(canonicalDest, cfg.rootPath))
+            except: hasCanonical = dirExists(canonicalDest)
+            if hasCanonical:
+              try: cfg.driver.deleteDir(relativePath(rootDest, cfg.rootPath), force = true)
+              except:
+                try: removeDir(rootDest) except: discard
             else:
-              try: moveDir(rootDest, canonicalDest) except: discard
+              try: cfg.driver.moveDir(relativePath(rootDest, cfg.rootPath), relativePath(canonicalDest, cfg.rootPath))
+              except:
+                try: moveDir(rootDest, canonicalDest) except: discard
             rootDest = canonicalDest
           let derivedInstBase = cfg.pkgsPath() / pkgName
           let canonicalInstBase = cfg.pkgsPath() / canonical
-          if dirExists(derivedInstBase) and not dirExists(canonicalInstBase):
-            try: moveDir(derivedInstBase, canonicalInstBase) except: discard
+          var hasDerived = false
+          var hasCanInst = false
+          try: hasDerived = cfg.driver.exists(relativePath(derivedInstBase, cfg.rootPath))
+          except: hasDerived = dirExists(derivedInstBase)
+          try: hasCanInst = cfg.driver.exists(relativePath(canonicalInstBase, cfg.rootPath))
+          except: hasCanInst = dirExists(canonicalInstBase)
+          if hasDerived and not hasCanInst:
+            try: cfg.driver.moveDir(relativePath(derivedInstBase, cfg.rootPath), relativePath(canonicalInstBase, cfg.rootPath))
+            except:
+              try: moveDir(derivedInstBase, canonicalInstBase) except: discard
           curName = canonical
           rootMeta.name = canonical
           try:
@@ -206,7 +234,9 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
               var desc = ""
               var lic = ""
               try:
-                let content = readFile(nf)
+                let content =
+                  try: cfg.driver.read(relativePath(nf, cfg.rootPath))
+                  except: readFile(nf)
                 let m = cfg.parseManifest(content, nf)
                 desc = m.description
                 lic = m.license
@@ -263,7 +293,11 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         let ver = if versions.len > 0: $versions[0].version else: "0.0.0"
         for d in cfg.getDeps(name, ver, @[], refresh, meta.url):
           let dn = depName(d)
-          if dn.len == 0 or dn in seen: continue
+          if dn.len == 0:
+            if d.url.len > 0:
+              warn("cannot derive package name from URL: " & d.url & " - skipping")
+            continue
+          if dn in seen: continue
           var dmeta = pkgRefs.getOrDefault(dn, PkgRef())
           if dmeta.url.len == 0:
             if d.url.len > 0:
@@ -322,6 +356,10 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       result = @[]
       for d in deps:
         let dn = depName(d)
+        if dn.len == 0:
+          if d.url.len > 0:
+            warn("cannot derive package name from URL: " & d.url & " - skipping")
+          continue
         var meta = pkgRefs.getOrDefault(dn, PkgRef())
         if meta.url.len == 0:
           if d.url.len > 0:
@@ -447,7 +485,10 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         else: $rp.version
       cfg.logDebug("install: " & rp.name & "@" & verStr)
       let cacheDir = cfg.pkgsCachePath() / rp.name
-      if not dirExists(cacheDir):
+      var hasCache = false
+      try: hasCache = cfg.driver.exists(relativePath(cacheDir, cfg.rootPath))
+      except: hasCache = dirExists(cacheDir)
+      if not hasCache:
         var url = meta.url
         if url.len == 0:
           let m = cfg.fetchPkgMeta(rp.name)
@@ -462,27 +503,44 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       let label =
         if meta.refStr.len > 0: " @" & verStr
         else: " v" & verStr
-      if dirExists(verDir):
+      var hasVer = false
+      try: hasVer = cfg.driver.exists(relativePath(verDir, cfg.rootPath))
+      except: hasVer = dirExists(verDir)
+      if hasVer:
         installedCount.inc
         installedLabels.add(rp.name & "@" & verStr)
         continue
       # build Manifest for installCleanCopy via cfg
       let manifestPath = cfg.findManifestInDir(cacheDir)
-      let manifest =
-        if manifestPath.len > 0 and fileExists(manifestPath):
+      var manifest: Manifest
+      var gotManifest = false
+      if manifestPath.len > 0:
+        var hasMan = false
+        try: hasMan = cfg.driver.exists(relativePath(manifestPath, cfg.rootPath))
+        except: hasMan = fileExists(manifestPath)
+        if hasMan:
           try:
-            let content = readFile(manifestPath)
-            cfg.parseManifest(content, manifestPath)
-          except: Manifest(path: manifestPath, extra: newJObject())
-        else:
-          let fallback = cacheDir / cfg.manifestNameForPkg(rp.name)
-          if fileExists(fallback):
-            try:
-              let content = readFile(fallback)
-              cfg.parseManifest(content, fallback)
-            except: Manifest(path: fallback, extra: newJObject())
-          else:
-            Manifest(path: "", extra: newJObject())
+            let content =
+              try: cfg.driver.read(relativePath(manifestPath, cfg.rootPath))
+              except: readFile(manifestPath)
+            manifest = cfg.parseManifest(content, manifestPath)
+            gotManifest = true
+          except: discard
+      if not gotManifest:
+        let fallback = cacheDir / cfg.manifestNameForPkg(rp.name)
+        var hasFall = false
+        try: hasFall = cfg.driver.exists(relativePath(fallback, cfg.rootPath))
+        except: hasFall = fileExists(fallback)
+        if hasFall:
+          try:
+            let content =
+              try: cfg.driver.read(relativePath(fallback, cfg.rootPath))
+              except: readFile(fallback)
+            manifest = cfg.parseManifest(content, fallback)
+            gotManifest = true
+          except: discard
+      if not gotManifest:
+        manifest = Manifest(path: manifestPath, extra: newJObject())
       proc getStrSeq(node: JsonNode, key: string): seq[string] =
         if node != nil and node.kind == JObject and node.hasKey(key):
           for v in node[key]:
@@ -589,8 +647,12 @@ proc developPackage*(cfg: DatpkgrConfig, dir: string, verbose = true): bool =
   let pkgName = if manifest.name.len > 0: manifest.name else: manifestPath.extractFilename.changeFileExt("")
   let version = if manifest.version.len > 0: manifest.version else: "0.0.0"
   let linkPath = cfg.developPath() / pkgName
-  discard existsOrCreateDir(cfg.developPath())
+  try: cfg.driver.makeDir("develop")
+  except:
+    discard existsOrCreateDir(cfg.developPath())
   cfg.safeRemoveSymlink(linkPath)
+  # createSymlink target `dir` is outside driver root, so raw std/os is required
+  # (driver.createSymlink validates target inside root via resolvePath)
   createSymlink(dir, linkPath)
   var deps: seq[types.DepEntry]
   for d in manifest.dependencies:
@@ -616,11 +678,19 @@ proc fetchRegistry*(cfg: DatpkgrConfig): bool =
 proc installedHasPackage*(cfg: DatpkgrConfig, pkgName: string): bool =
   let pkgBase = cfg.pkgsPath() / pkgName
   var hasInstalled = false
-  if dirExists(pkgBase):
-    for entry in walkDir(pkgBase):
-      if entry.kind == pcDir:
-        hasInstalled = true
-        break
+  let relBase = relativePath(pkgBase, cfg.rootPath)
+  try:
+    if cfg.driver.exists(relBase):
+      for meta in cfg.driver.list(relBase):
+        if meta.isDir:
+          hasInstalled = true
+          break
+  except:
+    if dirExists(pkgBase):
+      for entry in walkDir(pkgBase):
+        if entry.kind == pcDir:
+          hasInstalled = true
+          break
   if not hasInstalled:
     hasInstalled = cfg.resolveInstalledPath(pkgName, "").len > 0
   if hasInstalled: return true
@@ -657,7 +727,10 @@ proc uninstallPackage*(cfg: DatpkgrConfig, pkgName: string, pkgVersion: string =
         return false
     else:
       let verDir = cfg.pkgsPath() / pkgName / pkgVersion
-      if dirExists(verDir):
+      var hasVer = false
+      try: hasVer = cfg.driver.exists(relativePath(verDir, cfg.rootPath))
+      except: hasVer = dirExists(verDir)
+      if hasVer:
         if doConfirm("Remove " & pkgName & "@" & pkgVersion & "?"):
           cfg.safeRemoveDir(verDir)
           cfg.unrecordInstall(pkgName, pkgVersion)
@@ -671,11 +744,19 @@ proc uninstallPackage*(cfg: DatpkgrConfig, pkgName: string, pkgVersion: string =
   else:
     let recs = cfg.installedRecords(pkgName)
     var hasDirs = false
-    if dirExists(cfg.pkgsPath() / pkgName):
-      for e in walkDir(cfg.pkgsPath() / pkgName):
-        if e.kind == pcDir:
-          hasDirs = true
-          break
+    let relPkg = relativePath(cfg.pkgsPath() / pkgName, cfg.rootPath)
+    try:
+      if cfg.driver.exists(relPkg):
+        for meta in cfg.driver.list(relPkg):
+          if meta.isDir:
+            hasDirs = true
+            break
+    except:
+      if dirExists(cfg.pkgsPath() / pkgName):
+        for e in walkDir(cfg.pkgsPath() / pkgName):
+          if e.kind == pcDir:
+            hasDirs = true
+            break
     if recs.len == 0 and not hasDirs:
       cfg.logError("Package not found: " & pkgName)
       return false
