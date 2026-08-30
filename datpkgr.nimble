@@ -2,7 +2,7 @@
 
 version       = "0.1.0"
 author        = "George Lemon"
-description   = "App agnostic package manager library"
+description   = "App/Lang-agnostic package manager library"
 license       = "MIT"
 srcDir        = "src"
 
@@ -19,3 +19,4 @@ requires "threading >= 0.2.0"
 requires "flysystem >= 0.1.0"
 requires "mimedb >= 0.1.1"
 requires "checksums >= 0.2.2"
+
