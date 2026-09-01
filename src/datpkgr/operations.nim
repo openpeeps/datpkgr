@@ -150,14 +150,20 @@ proc manifestCanonicalName(cfg: DatpkgrConfig, manifestPath: string): string =
 # core install
 # ----------------------------------------------------------------------
 
+var installDepth {.threadvar.}: int
+
 proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     refresh = false, features: seq[string] = @[], verbose = true, url = "",
     doBuild = false, buildRelease = true, buildDebug = false,
     constraint: VersionConstraint = VersionConstraint(kind: vcAny, version: newVersion(0, 0, 0)),
     backend = "c", sourceFilter: string = "",
-    buildHook: proc(pkgName: string, preferRef: string, backend: string): bool = nil): bool =
+    buildHook: proc(pkgName: string, preferRef: string, backend: string): bool = nil,
+    suppressSummary = false): bool =
   ## Generic install via cfg. Returns true on success.
   ## `buildHook` is opt-in (builder stays in clue).
+  let isOuter = installDepth == 0
+  inc installDepth
+  defer: dec installDepth
   cfg.withDatpkgrDB do:
     let showProgress = verbose # isatty check left to caller via verbose / callbacks
     proc progress(msg: string) =
@@ -289,6 +295,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     var seen = initHashSet[string]()
     seen.incl(curName)
     var expandQueue = @[curName]
+    var firstCheck = true
     while expandQueue.len > 0:
       var nextNames = initHashSet[string]()
       for name in expandQueue:
@@ -338,7 +345,9 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         toDiscover.add(pkgRefs.getOrDefault(name, PkgRef()))
       if toDiscover.len > 0:
         cfg.logDebug("Phase A: fetching " & $toDiscover.len & " package(s)")
-        progress("checking " & $toDiscover.len & " " & pluralize(toDiscover.len, "package") & "...")
+        if firstCheck:
+          progress("checking " & curName & " deps (" & $toDiscover.len & " " & pluralize(toDiscover.len, "package") & ")")
+          firstCheck = false
         proc onFetch(name: string, count: int, cached: bool) =
           if showProgress:
             # use callbacks.onFetch if provided, else log
@@ -429,7 +438,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
           if toDiscover.len == 0:
             fail("Could not resolve unknown package(s): " & e.pending.join(", "))
             return false
-          progress("checking " & $toDiscover.len & " " & pluralize(toDiscover.len, "package") & "...")
+          progress("checking " & curName & " deps (" & $toDiscover.len & " " & pluralize(toDiscover.len, "package") & ")")
           proc onFetch2(name: string, count: int, cached: bool) =
             if showProgress:
               if cfg.callbacks.onFetch != nil:
@@ -482,7 +491,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         for i, dep in deps:
           let childIsLast = i == deps.high
           let childLeading =
-            if isRoot: ""
+            if isRoot: "  "
             else: leading & (if isLast: "   " else: "│  ")
           if dep.name in name2ver:
             renderDepTree(dep.name, childLeading, childIsLast, false, path)
@@ -491,7 +500,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
               dep.name & " " & $dep.constraint)
         path.excl(name)
       var path = initHashSet[string]()
-      renderDepTree(curName, "", false, true, path)
+      renderDepTree(curName, "  ", false, true, path)
 
     for sv in resolution.softViolations:
       var msg = sv.name & " resolved to " & $sv.chosen &
@@ -500,6 +509,16 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         msg.add(" from " & sv.fromPkg)
       warn(msg)
 
+    proc formatLabel(name, verStr: string): string =
+      if verStr.len == 0 or verStr == "0.0.0":
+        return name & "#HEAD"
+      if verStr == name:
+        return name & "#HEAD"
+      try:
+        discard parseVersion(verStr)
+        return name & "@" & verStr
+      except CatchableError:
+        return name & "#HEAD"
     var installedCount = 0
     var installedLabels: seq[string]
     var jobs: seq[InstallJob]
@@ -510,7 +529,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         else: $rp.version
       if cfg.isDevelopAvailable(rp.name):
         installedCount.inc
-        installedLabels.add(rp.name & "@" & verStr & " (develop)")
+        installedLabels.add(formatLabel(rp.name, verStr))
         continue
       cfg.logDebug("install: " & rp.name & "@" & verStr)
       let cacheDir = cfg.pkgsCachePath() / rp.name
@@ -537,7 +556,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       except: hasVer = dirExists(verDir)
       if hasVer:
         installedCount.inc
-        installedLabels.add(rp.name & "@" & verStr)
+        installedLabels.add(formatLabel(rp.name, verStr))
         continue
       # build Manifest for installCleanCopy via cfg
       let manifestPath = cfg.findManifestInDir(cacheDir)
@@ -593,7 +612,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       for i, ok in results:
         if ok:
           installedCount.inc
-          installedLabels.add(jobs[i].name & "@" & jobs[i].verStr)
+          installedLabels.add(formatLabel(jobs[i].name, jobs[i].verStr))
         else:
           warn("Failed to install " & jobs[i].name & " v" & jobs[i].verStr)
 
@@ -613,10 +632,20 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       cfg.recordInstall(rp.name, verStr, deps, root = rp.name == curName,
         features = feats, installPath = cfg.pkgsPath() / rp.name / verStr)
 
-    if installedCount > 0:
-      cfg.logInfo("Installed " & $installedCount & " " & pluralize(installedCount, "package"))
+    # dedup labels globally (in case same pkg appears via multiple paths)
+    var seenLbl = initHashSet[string]()
+    var deduped: seq[string]
     for lbl in installedLabels:
-      cfg.logInfo("  " & lbl)
+      if lbl notin seenLbl:
+        seenLbl.incl(lbl)
+        deduped.add(lbl)
+    installedLabels = deduped
+    installedCount = installedLabels.len
+    if not suppressSummary and isOuter:
+      if installedCount > 0:
+        cfg.logSuccess("Installed " & $installedCount & " " & pluralize(installedCount, "package"))
+      for lbl in installedLabels:
+        cfg.logInfo("  " & lbl)
 
     cfg.pruneOrphans(verbose)
 

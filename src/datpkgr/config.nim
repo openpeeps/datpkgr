@@ -13,6 +13,7 @@ type
   LogLevel* = enum
     lvlDebug
     lvlInfo
+    lvlSuccess
     lvlWarn
     lvlError
 
@@ -47,8 +48,9 @@ proc defaultLog(level: LogLevel, msg: string) =
   case level
   of lvlDebug: stderr.writeLine("[datpkgr] " & msg)
   of lvlInfo: echo msg
+  of lvlSuccess: echo msg
   of lvlWarn: stderr.writeLine("Warning: " & msg)
-  of lvlError: stderr.writeLine("Error: " & msg)
+  of lvlError: stderr.writeLine("Er ror: " & msg)
 
 proc defaultManifestFileName(pkgName: string): string =
   ## Generic default: language-agnostic manifest. Apps override via
@@ -163,6 +165,10 @@ proc logInfo*(cfg: DatpkgrConfig, msg: string) =
 proc logWarn*(cfg: DatpkgrConfig, msg: string) =
   if cfg.callbacks.log != nil:
     cfg.callbacks.log(lvlWarn, msg)
+
+proc logSuccess*(cfg: DatpkgrConfig, msg: string) =
+  if cfg.callbacks.log != nil:
+    cfg.callbacks.log(lvlSuccess, msg)
 
 proc logError*(cfg: DatpkgrConfig, msg: string) =
   if cfg.callbacks.log != nil:
