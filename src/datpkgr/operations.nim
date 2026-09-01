@@ -6,7 +6,7 @@
 # and Manifest.extra. Parallelism via malebolgia.
 
 import std/[sequtils, options, tables, sets, strformat, strutils,
-          times, os, osproc, terminal, strtabs]
+          times, os, osproc, terminal, strtabs, locks]
 
 import pkg/semver
 import pkg/openparser/json
@@ -20,6 +20,10 @@ import ./git
 import ./versions
 import ./install
 import ./resolver
+
+var installLogLock: Lock
+installLogLock.initLock()
+var pendingLogFn: proc(level: LogLevel, msg: string) {.gcsafe.}
 
 # ----------------------------------------------------------------------
 # helpers (from manager.nim)
@@ -129,6 +133,15 @@ proc installResolvedPkg(job: InstallJob): bool {.gcsafe.} =
     return true
   except CatchableError:
     return false
+
+proc loggedInstall(job: InstallJob, lbl: string): bool {.gcsafe.} =
+  let ok = installResolvedPkg(job)
+  if ok:
+    {.cast(gcsafe).}:
+      if pendingLogFn != nil:
+        withLock installLogLock:
+          pendingLogFn(lvlInfo, "  " & lbl)
+  ok
 
 proc manifestCanonicalName(cfg: DatpkgrConfig, manifestPath: string): string =
   try:
@@ -522,14 +535,24 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     var installedCount = 0
     var installedLabels: seq[string]
     var jobs: seq[InstallJob]
+    var headerEmitted = false
+    proc ensureHeader() =
+      if not headerEmitted and not suppressSummary and isOuter:
+        cfg.logSuccess("Installing packages...")
+        headerEmitted = true
     for rp in resolution.packages:
       let meta = pkgRefs.getOrDefault(rp.name, PkgRef())
       let verStr =
         if meta.refStr.len > 0: meta.refStr
         else: $rp.version
       if cfg.isDevelopAvailable(rp.name):
+        let lbl = formatLabel(rp.name, verStr)
         installedCount.inc
-        installedLabels.add(formatLabel(rp.name, verStr))
+        installedLabels.add(lbl)
+        if not suppressSummary and isOuter:
+          ensureHeader()
+          withLock installLogLock:
+            cfg.callbacks.log(lvlInfo, "  " & lbl)
         continue
       cfg.logDebug("install: " & rp.name & "@" & verStr)
       let cacheDir = cfg.pkgsCachePath() / rp.name
@@ -555,8 +578,13 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       try: hasVer = cfg.driver.exists(relativePath(verDir, cfg.rootPath))
       except: hasVer = dirExists(verDir)
       if hasVer:
+        let lbl = formatLabel(rp.name, verStr)
         installedCount.inc
-        installedLabels.add(formatLabel(rp.name, verStr))
+        installedLabels.add(lbl)
+        if not suppressSummary and isOuter:
+          ensureHeader()
+          withLock installLogLock:
+            cfg.callbacks.log(lvlInfo, "  " & lbl)
         continue
       # build Manifest for installCleanCopy via cfg
       let manifestPath = cfg.findManifestInDir(cacheDir)
@@ -604,15 +632,22 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         skipDirs: getStrSeq(ex, "skipDirs"),
         skipFiles: getStrSeq(ex, "skipFiles")))
     if jobs.len > 0:
+      ensureHeader()
       var results = newSeq[bool](jobs.len)
+      var jobLabels = newSeq[string](jobs.len)
+      for i, j in jobs:
+        jobLabels[i] = formatLabel(j.name, j.verStr)
+      pendingLogFn = cfg.callbacks.log
       var m = createMaster()
       m.awaitAll:
         for i, job in jobs:
-          m.spawn installResolvedPkg(job) -> results[i]
+          let lbl = jobLabels[i]
+          m.spawn loggedInstall(job, lbl) -> results[i]
+      pendingLogFn = nil
       for i, ok in results:
         if ok:
           installedCount.inc
-          installedLabels.add(formatLabel(jobs[i].name, jobs[i].verStr))
+          installedLabels.add(jobLabels[i])
         else:
           warn("Failed to install " & jobs[i].name & " v" & jobs[i].verStr)
 
@@ -649,8 +684,6 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     if not suppressSummary and isOuter:
       if installedCount > 0:
         cfg.logSuccess("Installed " & $installedCount & " " & pluralize(installedCount, "package"))
-      for lbl in installedLabels:
-        cfg.logInfo("  " & lbl)
 
     cfg.pruneOrphans(verbose)
 

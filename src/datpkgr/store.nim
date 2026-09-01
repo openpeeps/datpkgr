@@ -416,7 +416,7 @@ proc initDatpkgr*(cfg: DatpkgrConfig) =
     cfg.stores.db.dropTable("deps")
 
   if not hasDatabase:
-    cfg.logInfo("Initializing Datpkgr database...")
+    cfg.logInfo("Initializing database...")
     let sources = cfg.loadSources()
     var seededAny = false
     for src in sources:
