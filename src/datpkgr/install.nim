@@ -24,16 +24,24 @@ proc recordInstall*(cfg: DatpkgrConfig, name, version: string, deps: seq[DepEntr
   ## `installPath` is the directory the compiler gets via `--path`.
   cfg.withDatpkgrDB do:
     let tbl = cfg.stores.db.getTable("installed").get()
+    var existingRoot = false
+    var existingPk = ""
     for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():
       if row["version"].strVal == version:
-        discard cfg.stores.db.deleteRow("installed", pk)
+        if row.hasKey("root") and row["root"].boolVal:
+          existingRoot = true
+        existingPk = pk
+        break
+    if existingPk.len > 0:
+      discard cfg.stores.db.deleteRow("installed", existingPk)
+    let newRoot = root or existingRoot
     var depsArr = newJArray()
     for (dn, dv) in deps:
       depsArr.add(%*{"name": dn, "version": dv})
     discard cfg.stores.db.insertRow("installed", row({
       "name": newTextValue(name),
       "version": newTextValue(version),
-      "root": newBoolValue(root),
+      "root": newBoolValue(newRoot),
       "features": newJSONValue(%features),
       "deps": newJSONValue(depsArr),
       "path": newTextValue(installPath),
@@ -298,17 +306,34 @@ proc pruneOrphans*(cfg: DatpkgrConfig, verbose = true) =
 
     var depsOf: Table[string, seq[string]]  # "name@ver" -> deps
     var installed: seq[(string, string)]    # (name, ver)
+    var installedByName: Table[string, seq[string]] # name -> versions
     var explicitRoots: HashSet[string]      # name@ver the user installed directly
+    # first pass: collect installed + roots
     for (pk, row) in tbl.allRows():
       let name = row["name"].strVal
       let ver = row["version"].strVal
       installed.add((name, ver))
+      if not installedByName.hasKey(name):
+        installedByName[name] = @[]
+      installedByName[name].add(ver)
       if row.hasKey("root") and row["root"].boolVal:
         explicitRoots.incl(name & "@" & ver)
+    # second pass: build deps graph with wildcard fallback for legacy empty versions
+    for (pk, row) in tbl.allRows():
+      let name = row["name"].strVal
+      let ver = row["version"].strVal
       var deps: seq[string]
       try:
         for dep in parseJson(row["deps"].jsonVal):
-          deps.add(dep["name"].getStr & "@" & dep["version"].getStr)
+          let dn = dep["name"].getStr
+          let dv = dep["version"].getStr
+          if dv.len == 0:
+            if installedByName.hasKey(dn) and installedByName[dn].len > 0:
+              deps.add(dn & "@" & installedByName[dn][0])
+            else:
+              deps.add(dn & "@")
+          else:
+            deps.add(dn & "@" & dv)
       except CatchableError:
         discard
       depsOf[name & "@" & ver] = deps
@@ -320,7 +345,7 @@ proc pruneOrphans*(cfg: DatpkgrConfig, verbose = true) =
     for key in explicitRoots:
       roots.add(key)
 
-    # BFS from roots -> reachable set
+    # BFS from roots -> reachable set (with wildcard fallback for empty-version deps)
     var reachable: HashSet[string]
     var queue = roots
     while queue.len > 0:
@@ -329,13 +354,49 @@ proc pruneOrphans*(cfg: DatpkgrConfig, verbose = true) =
       reachable.incl(key)
       if depsOf.hasKey(key):
         for d in depsOf[key]:
-          if d notin reachable:
+          if d in reachable: continue
+          if depsOf.hasKey(d) or d in reachable:
+            queue.add(d)
+          elif d.endsWith("@"):
+            # wildcard: any installed version of that name
+            let n = d[0 ..< d.len-1]
+            if installedByName.hasKey(n):
+              for v in installedByName[n]:
+                let cand = n & "@" & v
+                if cand notin reachable:
+                  queue.add(cand)
+          else:
+            # exact miss: try name fallback if version mismatch (e.g. HEAD vs semver)
+            let atPos = d.rfind('@')
+            if atPos >= 0:
+              let n = d[0 ..< atPos]
+              if installedByName.hasKey(n):
+                var foundExact = false
+                for v in installedByName[n]:
+                  if n & "@" & v == d:
+                    foundExact = true
+                    break
+                if not foundExact and installedByName[n].len > 0:
+                  # fallback to any installed version of that name
+                  for v in installedByName[n]:
+                    let cand = n & "@" & v
+                    if cand notin reachable:
+                      queue.add(cand)
+                  continue
             queue.add(d)
 
     var removed = 0
     for (name, ver) in installed:
       let key = name & "@" & ver
       if key in reachable: continue
+      # also consider reachable by name fallback (legacy empty deps may have added wildcard)
+      var isReachableByName = false
+      if installedByName.hasKey(name):
+        for v in installedByName[name]:
+          if (name & "@" & v) in reachable:
+            isReachableByName = true
+            break
+      if isReachableByName: continue
       let dir = cfg.pkgsPath() / name / ver
       cfg.safeRemoveDir(dir)
       let parentDir = cfg.pkgsPath() / name

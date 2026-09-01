@@ -617,8 +617,6 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
           warn("Failed to install " & jobs[i].name & " v" & jobs[i].verStr)
 
     for rp in resolution.packages:
-      if cfg.isDevelopAvailable(rp.name):
-        continue
       let meta = pkgRefs.getOrDefault(rp.name, PkgRef())
       let verStr = if meta.refStr.len > 0: meta.refStr else: $rp.version
       let feats = activeFeatOf.getOrDefault(rp.name)
@@ -627,8 +625,15 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         let dn = depName(d)
         if d.branch.len > 0:
           deps.add((dn, d.branch))
-        elif verStrs.hasKey(dn):
+        elif verStrs.hasKey(dn) and verStrs[dn].len > 0:
           deps.add((dn, verStrs[dn]))
+        elif name2ver.hasKey(dn) and name2ver[dn].len > 0:
+          deps.add((dn, name2ver[dn]))
+        else:
+          # fallback: use getDeps version as-is if unknown (should be rare)
+          deps.add((dn, ""))
+      # for develop-available packages, record deps as well to keep prune graph consistent
+      # (installPath still points to registry copy; develop link stays via isDevInstall)
       cfg.recordInstall(rp.name, verStr, deps, root = rp.name == curName,
         features = feats, installPath = cfg.pkgsPath() / rp.name / verStr)
 
