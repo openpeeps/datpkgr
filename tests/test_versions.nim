@@ -1,4 +1,4 @@
-import std/[os, strutils, unittest, json, tables]
+import std/[os, strutils, unittest, json, tables, osproc]
 import pkg/semver
 import pkg/boogie/stores/rdbms
 import datpkgr/config
@@ -117,6 +117,25 @@ suite "versions — headVersion fallback":
     writeFile(cache / "manifest.json", """{"name":"mypkg","version":"1.2.3"}""")
     let v = cfg.headVersion("mypkg")
     check $v == "1.2.3"
+
+suite "versions — readManifestContent tagless fallback":
+  test "manifest-version read falls back to HEAD when no tags exist":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.manifestFileName = proc(pkg: string): string = "manifest.json"
+    cfg.initDatpkgr()
+    let origin = getTempDir() / "datpkgr_tagless_origin" / $getCurrentProcessId()
+    createDir(origin)
+    defer: removeDir(origin)
+    writeFile(origin / "manifest.json", """{"name":"taglessdep","version":"0.1.0"}""")
+    check execCmdEx("git -C " & origin & " init -q").exitCode == 0
+    check execCmdEx("git -C " & origin & " add .").exitCode == 0
+    check execCmdEx("git -C " & origin & " commit -qm init").exitCode == 0
+    let dest = cfg.pkgsCachePath() / "taglessdep"
+    check execCmdEx("git clone -q " & origin & " " & dest).exitCode == 0
+    # no tags: tagForVersion finds nothing, but the HEAD fallback must serve it
+    check tagForVersion(dest, "0.1.0") == ""
+    check cfg.readManifestContent(dest, "taglessdep", "0.1.0").len > 0
 
 suite "versions — getDeps caching":
   test "caches and serves from deps table":

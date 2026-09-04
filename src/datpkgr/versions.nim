@@ -584,12 +584,12 @@ proc readManifestContent*(cfg: DatpkgrConfig, dest, name, version: string): stri
         except: tagForVersion(dest, version)
       else: tagForVersion(dest, version)
   let (output, exitCode) =
-    if version == "0.0.0":
+    if version == "0.0.0" or tag.len == 0:
+      # No semver tag (tagless repo, or a headVersion fallback like 0.1.0
+      # with zero tags) — read the manifest at HEAD so deps are not dropped.
       cfg.gitExec("git -C " & dest & " show origin/" & cfg.defaultBranch(dest) & ":" &
         manifestName)
     else:
-      if tag.len == 0:
-        return ""
       cfg.gitExec("git -C " & dest & " show " & tag & ":" & manifestName)
   if exitCode == 0: output else: ""
 

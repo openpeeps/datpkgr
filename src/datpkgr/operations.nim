@@ -118,10 +118,17 @@ proc installResolvedPkg(job: InstallJob): bool {.gcsafe.} =
   if job.refStr.len > 0:
     if not checkoutRefRaw(job.cacheDir, job.refStr, job.refresh):
       return false
+  elif job.verStr == "HEAD":
+    # Tagless repo: pin the working copy to the default branch HEAD so a
+    # stale tag checkout from a previous run can never leak in.
+    discard checkoutHeadRaw(job.cacheDir, job.refresh)
   elif job.verStr != "0.0.0":
     let tag = tagForVersion(job.cacheDir, job.verStr)
     if tag.len > 0:
       discard checkoutTagRaw(job.cacheDir, tag)
+    else:
+      # No tag matches (tagless repo seen via manifest version) — HEAD.
+      discard checkoutHeadRaw(job.cacheDir, job.refresh)
   try:
     let m = manifestForJob(job)
     # Use flysystem when possible via tmpCfg derived from verDir root
@@ -289,11 +296,15 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
 
     var registry: PackageRegistry
     var registered = initHashSet[string]()
+    var tagless = initHashSet[string]()
     var pkgRefs = initTable[string, PkgRef]()
     pkgRefs[curName] = rootMeta
 
     proc registerVersions(name: string, versions: seq[DiscoveredVersion]) =
       if versions.len == 0:
+        # No semver tags — resolves to HEAD. Tracked so labels, install
+        # dirs and records always render `#HEAD`, never the manifest version.
+        tagless.incl(name)
         registry.addPackage(UnresolvedPackage(name: name,
           version: cfg.headVersion(name), dependencies: @[]))
       else:
@@ -477,7 +488,13 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     for rp in resolution.packages:
       let meta = pkgRefs.getOrDefault(rp.name, PkgRef())
       name2ver[rp.name] = $rp.version
-      verStrs[rp.name] = if meta.refStr.len > 0: meta.refStr else: $rp.version
+      if meta.refStr.len > 0:
+        verStrs[rp.name] = meta.refStr
+      elif rp.name in tagless:
+        # Tagless repo (no git tags): always HEAD, never manifest version.
+        verStrs[rp.name] = "HEAD"
+      else:
+        verStrs[rp.name] = $rp.version
     cfg.logDebug("resolved " & $resolution.packages.len & " package(s)")
     if verbose:
       cfg.logInfo("Dependency tree")
@@ -487,6 +504,8 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         var label = name
         if refStr.len > 0:
           label.add(" @" & refStr)
+        elif name in tagless:
+          label.add(" @HEAD")
         else:
           let ver = name2ver.getOrDefault(name)
           if ver.len > 0 and ver != "0.0.0":
@@ -543,9 +562,8 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         headerEmitted = true
     for rp in resolution.packages:
       let meta = pkgRefs.getOrDefault(rp.name, PkgRef())
-      let verStr =
-        if meta.refStr.len > 0: meta.refStr
-        else: $rp.version
+      let verStr = verStrs.getOrDefault(rp.name,
+        if meta.refStr.len > 0: meta.refStr else: $rp.version)
       if cfg.isDevelopAvailable(rp.name):
         let lbl = formatLabel(rp.name, verStr)
         installedCount.inc
@@ -655,7 +673,8 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
 
     for rp in resolution.packages:
       let meta = pkgRefs.getOrDefault(rp.name, PkgRef())
-      let verStr = if meta.refStr.len > 0: meta.refStr else: $rp.version
+      let verStr = verStrs.getOrDefault(rp.name,
+        if meta.refStr.len > 0: meta.refStr else: $rp.version)
       let feats = activeFeatOf.getOrDefault(rp.name)
       var deps: seq[types.DepEntry]
       for d in cfg.getDeps(rp.name, $rp.version, feats, url = pkgRefs.getOrDefault(rp.name).url):
