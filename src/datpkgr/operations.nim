@@ -304,7 +304,11 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       if versions.len == 0:
         # No semver tags — resolves to HEAD. Tracked so labels, install
         # dirs and records always render `#HEAD`, never the manifest version.
-        tagless.incl(name)
+        # Only when proven: the cache clone must exist and hold zero semver
+        # tags. A transient discovery miss (package absent from one batch
+        # result) must not rebrand a tagged package as HEAD.
+        if not cfg.hasLocalSemverTags(name):
+          tagless.incl(name)
         registry.addPackage(UnresolvedPackage(name: name,
           version: cfg.headVersion(name), dependencies: @[]))
       else:
@@ -688,9 +692,20 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         else:
           # fallback: use getDeps version as-is if unknown (should be rare)
           deps.add((dn, ""))
+      var isRoot = rp.name == curName
+      if rp.name in tagless and verStr == "HEAD":
+        # Tagless packages have no real versions: any non-HEAD row for this
+        # name is stale manifest-version junk from before the HEAD
+        # normalization — replace it instead of coexisting with it (mixed
+        # rows confuse "latest" readers with duplicate dirs/paths).
+        # Develop records are never tagless, but keep them regardless.
+        for rec in cfg.installedRecords(rp.name):
+          if rec.version != "HEAD" and not cfg.isDevInstall(rec):
+            isRoot = isRoot or rec.root
+            cfg.unrecordInstall(rp.name, rec.version)
       # for develop-available packages, record deps as well to keep prune graph consistent
       # (installPath still points to registry copy; develop link stays via isDevInstall)
-      cfg.recordInstall(rp.name, verStr, deps, root = rp.name == curName,
+      cfg.recordInstall(rp.name, verStr, deps, root = isRoot,
         features = feats, installPath = cfg.pkgsPath() / rp.name / verStr)
 
     # dedup labels globally (in case same pkg appears via multiple paths)

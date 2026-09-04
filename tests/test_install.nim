@@ -106,3 +106,43 @@ suite "install — record and query":
     let paths = cfg.allInstalledPaths()
     check paths.len == 2
     check cfg.pkgsPath()/"pkg"/"2.0.0" in paths or cfg.pkgsPath()/"pkg"/"2.0.0"/"src" in paths
+
+  test "allInstalledPaths includes HEAD-only packages":
+    # Regression: tagless packages (sole `HEAD` record, e.g. sorta) vanished
+    # from every `--path` list, failing dependents with `cannot open file`
+    # even though installed.
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    cfg.recordInstall("sorta", "HEAD", @[], root=false, installPath=cfg.pkgsPath()/"sorta"/"HEAD")
+    let paths = cfg.allInstalledPaths()
+    check paths.len == 1
+    check cfg.pkgsPath()/"sorta"/"HEAD" in paths
+
+  test "allInstalledPaths prefers HEAD over semver rows":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    cfg.recordInstall("pkg", "0.2.0", @[], root=false, installPath=cfg.pkgsPath()/"pkg"/"0.2.0")
+    cfg.recordInstall("pkg", "HEAD", @[], root=false, installPath=cfg.pkgsPath()/"pkg"/"HEAD")
+    let paths = cfg.allInstalledPaths()
+    check paths.len == 1
+    check cfg.pkgsPath()/"pkg"/"HEAD" in paths
+
+  test "allInstalledPaths keeps branch rows, drops empty versions":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    cfg.recordInstall("branched", "main", @[], root=true, installPath=cfg.pkgsPath()/"branched"/"main")
+    cfg.recordInstall("legacy", "", @[], root=true, installPath=cfg.pkgsPath()/"legacy"/"x")
+    let paths = cfg.allInstalledPaths()
+    check cfg.pkgsPath()/"branched"/"main" in paths
+    check paths.len == 1
+
+  test "resolveDepPathLike prefers HEAD dirs":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    createDir(cfg.pkgsPath() / "pkg" / "1.0.0")
+    createDir(cfg.pkgsPath() / "pkg" / "HEAD")
+    check cfg.resolveDepPathLike("pkg") == cfg.pkgsPath() / "pkg" / "HEAD"

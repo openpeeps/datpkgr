@@ -198,25 +198,33 @@ proc resolveDepPathLike*(cfg: DatpkgrConfig, name: string): string =
   if not hasBase: return ""
   var best = ""
   var bestVer = newVersion(0, 0, 0)
+  var bestRolling = false
   try:
     for meta in cfg.driver.list(relBase):
       if not meta.isDir: continue
       let entryPath = cfg.rootPath / meta.path
       try:
         let v = parseVersion(entryPath.extractFilename)
-        if v > bestVer:
+        if not bestRolling and v > bestVer:
           bestVer = v
           best = entryPath
-      except CatchableError: discard
+      except CatchableError:
+        # Rolling dir (HEAD, branch): newest upstream state — wins over semver.
+        if not bestRolling:
+          bestRolling = true
+          best = entryPath
   except:
     for entry in walkDir(base):
       if entry.kind == pcDir:
         try:
           let v = parseVersion(entry.path.extractFilename)
-          if v > bestVer:
+          if not bestRolling and v > bestVer:
             bestVer = v
             best = entry.path
-        except CatchableError: discard
+        except CatchableError:
+          if not bestRolling:
+            bestRolling = true
+            best = entry.path
   best
 
 proc pathForImports*(cfg: DatpkgrConfig, p: string): string =
@@ -249,16 +257,25 @@ proc allInstalledPaths*(cfg: DatpkgrConfig, ): seq[string] =
   ## One `--path` (install dir) per installed package — the latest version each —
   ## so `import xyz` / `import pkg/xyz` resolves for any clue-installed package.
   ## One path per package avoids Nim's ambiguity error from multiple versions.
-  var bestBy: Table[string, tuple[ver: Version, path: string]]
+  ## Non-semver records (HEAD for tagless repos, branch pins) track moving
+  ## upstream, so they rank above any fixed semver version. Without this,
+  ## tagless packages (sole `HEAD` record) vanish from every `--path` list and
+  ## dependents fail with `cannot open file` even though they are installed.
+  var bestBy: Table[string, tuple[ver: Version, path: string, rolling: bool]]
   cfg.withDatpkgrDB do:
     for (pk, row) in cfg.stores.db.getTable("installed").get().allRows():
       let name = row["name"].strVal
+      let verStr = row["version"].strVal
       try:
-        let v = parseVersion(row["version"].strVal)
-        if not bestBy.hasKey(name) or v > bestBy[name].ver:
-          bestBy[name] = (v, row["path"].strVal)
+        let v = parseVersion(verStr)
+        if not bestBy.hasKey(name) or (not bestBy[name].rolling and v > bestBy[name].ver):
+          bestBy[name] = (v, row["path"].strVal, false)
       except CatchableError:
-        discard
+        # Rolling ref (HEAD, branch): newest upstream state — wins over semver.
+        # First rolling record wins ties; empty versions stay dropped (legacy).
+        if verStr.len == 0: continue
+        if not bestBy.hasKey(name) or not bestBy[name].rolling:
+          bestBy[name] = (newVersion(0, 0, 0), row["path"].strVal, true)
   for name, entry in bestBy:
     var p = entry.path
     if p.len == 0:

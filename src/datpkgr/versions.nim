@@ -157,6 +157,21 @@ proc tagForVersion*(cfg: DatpkgrConfig, dest: string, version: string): string =
   if version in tags: return version
   ""
 
+proc hasLocalSemverTags*(cfg: DatpkgrConfig, name: string): bool =
+  ## True when the package's cache clone exists and holds at least one semver
+  ## tag. Used to tell a genuinely tagless repo (HEAD install) apart from a
+  ## transient discovery miss — the latter must never baptize a tagged package
+  ## as HEAD.
+  let dest = cfg.pkgsCachePath() / name
+  var existsDest = false
+  try: existsDest = cfg.driver.exists(relativePath(dest, cfg.rootPath))
+  except: existsDest = dirExists(dest)
+  if not existsDest: return false
+  for tag in findLocalTags(cfg, dest):
+    let (ok, _) = parseTag(tag)
+    if ok: return true
+  false
+
 proc isCruftName(name: string, m: Manifest): bool =
   ## Generic cruft heuristic. `Manifest.extra` may contain `skipDirs`/`skipFiles`.
   let lower = name.toLowerAscii
