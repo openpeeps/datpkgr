@@ -177,6 +177,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
   let isOuter = installDepth == 0
   inc installDepth
   defer: dec installDepth
+
   cfg.withDatpkgrDB do:
     let showProgress = verbose # isatty check left to caller via verbose / callbacks
     proc progress(msg: string) =
@@ -604,6 +605,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
           except: discard
       if not gotManifest:
         let fallback = cacheDir / cfg.manifestNameForPkg(rp.name)
+        echo fallback
         var hasFall = false
         try: hasFall = cfg.driver.exists(relativePath(fallback, cfg.rootPath))
         except: hasFall = fileExists(fallback)
@@ -686,7 +688,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         cfg.logSuccess("Installed " & $installedCount & " " & pluralize(installedCount, "package"))
 
     cfg.pruneOrphans(verbose)
-
+    
     if doBuild and buildHook != nil:
       if not buildHook(curName, rootMeta.refStr, backend):
         return false
