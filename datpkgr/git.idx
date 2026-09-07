@@ -1,0 +1,21 @@
+nimTitle	git	datpkgr/git.html	module datpkgr/git		0
+nim	MaxConcurrentGit	datpkgr/git.html#MaxConcurrentGit	const MaxConcurrentGit		11
+nim	gitSemaphore	datpkgr/git.html#gitSemaphore	var gitSemaphore		13
+nim	failedClones	datpkgr/git.html#failedClones	var failedClones		15
+nim	failedClonesLock	datpkgr/git.html#failedClonesLock	var failedClonesLock		16
+nim	gitEnv	datpkgr/git.html#gitEnv	proc gitEnv(nonInteractive = false): StringTableRef		19
+nim	gitExec	datpkgr/git.html#gitExec,DatpkgrConfig,string,StringTableRef	proc gitExec(cfg: DatpkgrConfig; cmd: string; env: StringTableRef = nil): tuple[\n    output: string, exitCode: int]		27
+nim	gitExecRaw	datpkgr/git.html#gitExecRaw,string,StringTableRef	proc gitExecRaw(cmd: string; env: StringTableRef = nil): tuple[output: string,\n    exitCode: int]		49
+nim	gitExecLegacy	datpkgr/git.html#gitExecLegacy,string,StringTableRef	proc gitExecLegacy(cmd: string; env: StringTableRef = nil): tuple[output: string,\n    exitCode: int]		68
+nim	toGitSshUrl	datpkgr/git.html#toGitSshUrl,string	proc toGitSshUrl(url: string): string		71
+nim	cloneRepo	datpkgr/git.html#cloneRepo,DatpkgrConfig,string,string	proc cloneRepo(cfg: DatpkgrConfig; url, dest: string; nonInteractive = false): bool		86
+nim	refreshRemoteTags	datpkgr/git.html#refreshRemoteTags,DatpkgrConfig,string,string	proc refreshRemoteTags(cfg: DatpkgrConfig; dest, url: string; nonInteractive = false): bool		98
+nim	clonePackage	datpkgr/git.html#clonePackage,DatpkgrConfig,string,string	proc clonePackage(cfg: DatpkgrConfig; url, dest: string; refresh = false;\n             nonInteractive = false): bool		111
+nim	checkoutTag	datpkgr/git.html#checkoutTag,DatpkgrConfig,string,string	proc checkoutTag(cfg: DatpkgrConfig; dest, tag: string): bool		128
+nim	checkoutHead	datpkgr/git.html#checkoutHead,DatpkgrConfig,string	proc checkoutHead(cfg: DatpkgrConfig; dest: string; refresh = false): bool		132
+nim	checkoutRef	datpkgr/git.html#checkoutRef,DatpkgrConfig,string,string	proc checkoutRef(cfg: DatpkgrConfig; dest, refStr: string; refresh = false): bool		153
+nim	checkoutTagRaw	datpkgr/git.html#checkoutTagRaw,string,string	proc checkoutTagRaw(dest, tag: string): bool		163
+nim	checkoutHeadRaw	datpkgr/git.html#checkoutHeadRaw,string	proc checkoutHeadRaw(dest: string; refresh = false): bool		167
+nim	checkoutRefRaw	datpkgr/git.html#checkoutRefRaw,string,string	proc checkoutRefRaw(dest, refStr: string; refresh = false): bool		185
+nim	GitHeadInfo	datpkgr/git.html#GitHeadInfo	object GitHeadInfo		193
+nim	gitHeadInfo	datpkgr/git.html#gitHeadInfo,DatpkgrConfig,string,string	proc gitHeadInfo(cfg: DatpkgrConfig; name, url: string): Option[GitHeadInfo]		199

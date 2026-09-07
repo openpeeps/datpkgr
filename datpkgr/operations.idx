@@ -1,0 +1,15 @@
+nimTitle	operations	datpkgr/operations.html	module datpkgr/operations		0
+nim	pkgNameFromUrl	datpkgr/operations.html#pkgNameFromUrl,string	proc pkgNameFromUrl(url: string): string		32
+nim	depName	datpkgr/operations.html#depName,PkgDependency	proc depName(d: PkgDependency): string		49
+nim	parseFeatureFlags	datpkgr/operations.html#parseFeatureFlags,string	proc parseFeatureFlags(s: string): seq[string]		54
+nim	isGitUrl	datpkgr/operations.html#isGitUrl,string	proc isGitUrl(s: string): bool		60
+nim	pluralize	datpkgr/operations.html#pluralize,int,string	proc pluralize(n: int; singular: string): string		65
+nim	installPackage	datpkgr/operations.html#installPackage,DatpkgrConfig,string,string,seq[string],string,VersionConstraint,string,string,proc(string,string,string)	proc installPackage(cfg: DatpkgrConfig; pkgName: string; pkgRef: string = "";\n               refresh = false; features: seq[string] = @[]; verbose = true;\n               url = ""; doBuild = false; buildRelease = true;\n               buildDebug = false; constraint: VersionConstraint = VersionConstraint(\n    kind: vcAny, version: newVersion(0, 0, 0, "", "")); backend = "c";\n               sourceFilter: string = ""; buildHook: proc (pkgName: string;\n    preferRef: string; backend: string): bool = nil; suppressSummary = false): bool		175
+nim	updatePackage	datpkgr/operations.html#updatePackage,DatpkgrConfig,string	proc updatePackage(cfg: DatpkgrConfig; name: string; verbose = false): bool		744
+nim	updateAllPackages	datpkgr/operations.html#updateAllPackages,DatpkgrConfig,string	proc updateAllPackages(cfg: DatpkgrConfig; verbose = false; exePath = ""): bool		751
+nim	developPackage	datpkgr/operations.html#developPackage,DatpkgrConfig,string	proc developPackage(cfg: DatpkgrConfig; dir: string; verbose = true): bool		769
+nim	prunePackages	datpkgr/operations.html#prunePackages,DatpkgrConfig	proc prunePackages(cfg: DatpkgrConfig; verbose = true)		806
+nim	fetchRegistry	datpkgr/operations.html#fetchRegistry,DatpkgrConfig	proc fetchRegistry(cfg: DatpkgrConfig): bool		809
+nim	installedHasPackage	datpkgr/operations.html#installedHasPackage,DatpkgrConfig,string	proc installedHasPackage(cfg: DatpkgrConfig; pkgName: string): bool		812
+nim	uninstallPackage	datpkgr/operations.html#uninstallPackage,DatpkgrConfig,string,string,proc(string)	proc uninstallPackage(cfg: DatpkgrConfig; pkgName: string; pkgVersion: string = "";\n                 confirm: proc (msg: string): bool = nil; verbose = true): bool		838
+nim	versionsFor	datpkgr/operations.html#versionsFor,DatpkgrConfig,string	proc versionsFor(cfg: DatpkgrConfig; pkgName: string; refresh = false): seq[\n    DiscoveredVersion]		908

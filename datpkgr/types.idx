@@ -1,0 +1,9 @@
+nimTitle	types	datpkgr/types.html	module datpkgr/types		0
+nim	Source	datpkgr/types.html#Source	object Source		13
+nim	Package	datpkgr/types.html#Package	object Package		17
+nim	PkgRef	datpkgr/types.html#PkgRef	object PkgRef		26
+nim	PkgDependency	datpkgr/types.html#PkgDependency	object PkgDependency		31
+nim	Manifest	datpkgr/types.html#Manifest	object Manifest		40
+nim	DepEntry	datpkgr/types.html#DepEntry	tuple DepEntry		51
+nim	ManifestParser	datpkgr/types.html#ManifestParser	type ManifestParser		53
+nim	ManifestFinder	datpkgr/types.html#ManifestFinder	type ManifestFinder		54

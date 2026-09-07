@@ -1,0 +1,34 @@
+nimTitle	resolver	datpkgr/resolver.html	module datpkgr/resolver		0
+nim	vcExact	datpkgr/resolver.html#vcExact	VersionConstraintKind.vcExact		35
+nim	vcGte	datpkgr/resolver.html#vcGte	VersionConstraintKind.vcGte		35
+nim	vcGt	datpkgr/resolver.html#vcGt	VersionConstraintKind.vcGt		35
+nim	vcLte	datpkgr/resolver.html#vcLte	VersionConstraintKind.vcLte		35
+nim	vcLt	datpkgr/resolver.html#vcLt	VersionConstraintKind.vcLt		35
+nim	vcTilde	datpkgr/resolver.html#vcTilde	VersionConstraintKind.vcTilde		35
+nim	vcCaret	datpkgr/resolver.html#vcCaret	VersionConstraintKind.vcCaret		35
+nim	vcAny	datpkgr/resolver.html#vcAny	VersionConstraintKind.vcAny		35
+nim	VersionConstraintKind	datpkgr/resolver.html#VersionConstraintKind	enum VersionConstraintKind		35
+nim	VersionConstraint	datpkgr/resolver.html#VersionConstraint	object VersionConstraint		45
+nim	Dependency	datpkgr/resolver.html#Dependency	object Dependency		49
+nim	UnresolvedPackage	datpkgr/resolver.html#UnresolvedPackage	object UnresolvedPackage		55
+nim	ResolvedPackage	datpkgr/resolver.html#ResolvedPackage	object ResolvedPackage		60
+nim	SoftViolation	datpkgr/resolver.html#SoftViolation	object SoftViolation		64
+nim	Resolution	datpkgr/resolver.html#Resolution	object Resolution		74
+nim	ResolverError	datpkgr/resolver.html#ResolverError	object ResolverError		80
+nim	CircularDependencyError	datpkgr/resolver.html#CircularDependencyError	object CircularDependencyError		81
+nim	VersionConflictError	datpkgr/resolver.html#VersionConflictError	object VersionConflictError		82
+nim	BacktrackLimitError	datpkgr/resolver.html#BacktrackLimitError	object BacktrackLimitError		83
+nim	PackageNotFoundError	datpkgr/resolver.html#PackageNotFoundError	object PackageNotFoundError		84
+nim	PackageRegistry	datpkgr/resolver.html#PackageRegistry	type PackageRegistry		88
+nim	DepProvider	datpkgr/resolver.html#DepProvider	type DepProvider		91
+nim	parseConstraint	datpkgr/resolver.html#parseConstraint,string	proc parseConstraint(s: string): VersionConstraint		127
+nim	satisfies	datpkgr/resolver.html#satisfies,Version,VersionConstraint	proc satisfies(v: Version; c: VersionConstraint): bool		184
+nim	satisfiesAll	datpkgr/resolver.html#satisfiesAll,Version,openArray[VersionConstraint]	proc satisfiesAll(v: Version; constraints: openArray[VersionConstraint]): bool		212
+nim	`$`	datpkgr/resolver.html#$,VersionConstraint	proc `$`(c: VersionConstraint): string		219
+nim	`$`	datpkgr/resolver.html#$,ResolvedPackage	proc `$`(rp: ResolvedPackage): string		230
+nim	addPackage	datpkgr/resolver.html#addPackage,PackageRegistry,UnresolvedPackage	proc addPackage(registry: var PackageRegistry; pkg: UnresolvedPackage)		237
+nim	addPackage	datpkgr/resolver.html#addPackage,PackageRegistry,string,Version,seq[Dependency]	proc addPackage(registry: var PackageRegistry; name: string; version: Version;\n           dependencies: seq[Dependency])		245
+nim	resolveDetailed	datpkgr/resolver.html#resolveDetailed,PackageRegistry,seq[Dependency],DepProvider,int	proc resolveDetailed(registry: var PackageRegistry; roots: seq[Dependency];\n                getDeps: DepProvider; maxProbes = 1000): Resolution		507
+nim	resolve	datpkgr/resolver.html#resolve,PackageRegistry,seq[Dependency],DepProvider,int	proc resolve(registry: var PackageRegistry; roots: seq[Dependency];\n        getDeps: DepProvider; maxProbes = 1000): seq[ResolvedPackage]		541
+nimgrp	addpackage	datpkgr/resolver.html#addPackage-procs-all	proc		237
+nimgrp	$	datpkgr/resolver.html#$-procs-all	proc		219

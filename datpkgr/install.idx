@@ -1,0 +1,17 @@
+nimTitle	install	datpkgr/install.html	module datpkgr/install		0
+nim	recordInstall	datpkgr/install.html#recordInstall,DatpkgrConfig,string,string,seq[DepEntry],seq[string],string	proc recordInstall(cfg: DatpkgrConfig; name, version: string; deps: seq[DepEntry];\n              root = false; features: seq[string] = @[]; installPath = "")		18
+nim	installedPath	datpkgr/install.html#installedPath,DatpkgrConfig,string,string	proc installedPath(cfg: DatpkgrConfig; name, version: string): string		52
+nim	resolveInstalledPath	datpkgr/install.html#resolveInstalledPath,DatpkgrConfig,string,string	proc resolveInstalledPath(cfg: DatpkgrConfig; name, preferRef: string): string		63
+nim	InstalledRecord	datpkgr/install.html#InstalledRecord	object InstalledRecord		91
+nim	installedRecords	datpkgr/install.html#installedRecords,DatpkgrConfig,string	proc installedRecords(cfg: DatpkgrConfig; name: string): seq[InstalledRecord]		96
+nim	isDevInstall	datpkgr/install.html#isDevInstall,DatpkgrConfig,InstalledRecord	proc isDevInstall(cfg: DatpkgrConfig; rec: InstalledRecord): bool		109
+nim	installedRoots	datpkgr/install.html#installedRoots,DatpkgrConfig	proc installedRoots(cfg: DatpkgrConfig): seq[string]		116
+nim	devShadowWarningsEnabled	datpkgr/install.html#devShadowWarningsEnabled	var devShadowWarningsEnabled		126
+nim	collectInstalledDepNames	datpkgr/install.html#collectInstalledDepNames,DatpkgrConfig,seq[string]	proc collectInstalledDepNames(cfg: DatpkgrConfig; rootNames: seq[string]): seq[string]		157
+nim	resolveDepPathLike	datpkgr/install.html#resolveDepPathLike,DatpkgrConfig,string	proc resolveDepPathLike(cfg: DatpkgrConfig; name: string): string		190
+nim	pathForImports	datpkgr/install.html#pathForImports,DatpkgrConfig,string	proc pathForImports(cfg: DatpkgrConfig; p: string): string		230
+nim	allInstalledPaths	datpkgr/install.html#allInstalledPaths,DatpkgrConfig	proc allInstalledPaths(cfg: DatpkgrConfig): seq[string]		256
+nim	installedFeatures	datpkgr/install.html#installedFeatures,DatpkgrConfig	proc installedFeatures(cfg: DatpkgrConfig): Table[string, seq[string]]		290
+nim	unrecordInstall	datpkgr/install.html#unrecordInstall,DatpkgrConfig,string,string	proc unrecordInstall(cfg: DatpkgrConfig; name, version: string)		309
+nim	pruneOrphans	datpkgr/install.html#pruneOrphans,DatpkgrConfig	proc pruneOrphans(cfg: DatpkgrConfig; verbose = true)		318
+nim	installedCount	datpkgr/install.html#installedCount,DatpkgrConfig	proc installedCount(cfg: DatpkgrConfig): int		451

@@ -1,0 +1,34 @@
+nimTitle	config	datpkgr/config.html	module datpkgr/config		0
+nim	lvlDebug	datpkgr/config.html#lvlDebug	LogLevel.lvlDebug		13
+nim	lvlInfo	datpkgr/config.html#lvlInfo	LogLevel.lvlInfo		13
+nim	lvlSuccess	datpkgr/config.html#lvlSuccess	LogLevel.lvlSuccess		13
+nim	lvlWarn	datpkgr/config.html#lvlWarn	LogLevel.lvlWarn		13
+nim	lvlError	datpkgr/config.html#lvlError	LogLevel.lvlError		13
+nim	LogLevel	datpkgr/config.html#LogLevel	enum LogLevel		13
+nim	Callbacks	datpkgr/config.html#Callbacks	object Callbacks		20
+nim	DatpkgrStores	datpkgr/config.html#DatpkgrStores	object DatpkgrStores		24
+nim	DatpkgrConfig	datpkgr/config.html#DatpkgrConfig	type DatpkgrConfig		29
+nim	Config	datpkgr/config.html#Config	type Config		45
+nim	newDatpkgrConfig	datpkgr/config.html#newDatpkgrConfig,string,string	proc newDatpkgrConfig(appName: string; rootPath = ""; debugEnabled = false;\n                 callbacks = Callbacks()): DatpkgrConfig		80
+nim	manifestNameForPkg	datpkgr/config.html#manifestNameForPkg,DatpkgrConfig,string	proc manifestNameForPkg(cfg: DatpkgrConfig; pkgName: string): string		106
+nim	findManifestForDir	datpkgr/config.html#findManifestForDir,DatpkgrConfig,string	proc findManifestForDir(cfg: DatpkgrConfig; dir: string): string		110
+nim	findManifestInDir	datpkgr/config.html#findManifestInDir,DatpkgrConfig,string	proc findManifestInDir(cfg: DatpkgrConfig; dir: string): string		113
+nim	parseManifest	datpkgr/config.html#parseManifest,DatpkgrConfig,string,string	proc parseManifest(cfg: DatpkgrConfig; content: string; path: string): Manifest		153
+nim	logDebug	datpkgr/config.html#logDebug,DatpkgrConfig,string	proc logDebug(cfg: DatpkgrConfig; msg: string)		157
+nim	logInfo	datpkgr/config.html#logInfo,DatpkgrConfig,string	proc logInfo(cfg: DatpkgrConfig; msg: string)		161
+nim	logWarn	datpkgr/config.html#logWarn,DatpkgrConfig,string	proc logWarn(cfg: DatpkgrConfig; msg: string)		165
+nim	logSuccess	datpkgr/config.html#logSuccess,DatpkgrConfig,string	proc logSuccess(cfg: DatpkgrConfig; msg: string)		169
+nim	logError	datpkgr/config.html#logError,DatpkgrConfig,string	proc logError(cfg: DatpkgrConfig; msg: string)		173
+nim	dbPath	datpkgr/config.html#dbPath,DatpkgrConfig	proc dbPath(cfg: DatpkgrConfig): string		177
+nim	versionsDBPath	datpkgr/config.html#versionsDBPath,DatpkgrConfig	proc versionsDBPath(cfg: DatpkgrConfig): string		178
+nim	pkgsPath	datpkgr/config.html#pkgsPath,DatpkgrConfig	proc pkgsPath(cfg: DatpkgrConfig): string		179
+nim	pkgsCachePath	datpkgr/config.html#pkgsCachePath,DatpkgrConfig	proc pkgsCachePath(cfg: DatpkgrConfig): string		180
+nim	binPath	datpkgr/config.html#binPath,DatpkgrConfig	proc binPath(cfg: DatpkgrConfig): string		181
+nim	buildTempPath	datpkgr/config.html#buildTempPath,DatpkgrConfig	proc buildTempPath(cfg: DatpkgrConfig): string		182
+nim	developPath	datpkgr/config.html#developPath,DatpkgrConfig	proc developPath(cfg: DatpkgrConfig): string		183
+nim	sourcesPath	datpkgr/config.html#sourcesPath,DatpkgrConfig	proc sourcesPath(cfg: DatpkgrConfig): string		184
+nim	registriesDir	datpkgr/config.html#registriesDir,DatpkgrConfig	proc registriesDir(cfg: DatpkgrConfig): string		185
+nim	isInsidePkgs	datpkgr/config.html#isInsidePkgs,DatpkgrConfig,string	proc isInsidePkgs(cfg: DatpkgrConfig; dir: string): bool		187
+nim	isInsideDevelop	datpkgr/config.html#isInsideDevelop,DatpkgrConfig,string	proc isInsideDevelop(cfg: DatpkgrConfig; p: string): bool		191
+nim	safeRemoveDir	datpkgr/config.html#safeRemoveDir,DatpkgrConfig,string	proc safeRemoveDir(cfg: DatpkgrConfig; dir: string)		195
+nim	safeRemoveSymlink	datpkgr/config.html#safeRemoveSymlink,DatpkgrConfig,string	proc safeRemoveSymlink(cfg: DatpkgrConfig; p: string)		206

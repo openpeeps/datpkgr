@@ -1,0 +1,18 @@
+nimTitle	store	datpkgr/store.html	module datpkgr/store		0
+nim	debugLog	datpkgr/store.html#debugLog,DatpkgrConfig,string	proc debugLog(cfg: DatpkgrConfig; msg: string)		19
+nim	isValidSourceName	datpkgr/store.html#isValidSourceName,string	proc isValidSourceName(s: string): bool		23
+nim	sourceCachePath	datpkgr/store.html#sourceCachePath,DatpkgrConfig,string	proc sourceCachePath(cfg: DatpkgrConfig; name: string): string		29
+nim	ensureSourcesFile	datpkgr/store.html#ensureSourcesFile,DatpkgrConfig	proc ensureSourcesFile(cfg: DatpkgrConfig)		32
+nim	loadSources	datpkgr/store.html#loadSources,DatpkgrConfig	proc loadSources(cfg: DatpkgrConfig): seq[Source]		39
+nim	saveSources	datpkgr/store.html#saveSources,DatpkgrConfig,seq[Source]	proc saveSources(cfg: DatpkgrConfig; sources: seq[Source])		60
+nim	resetDatpkgrForTests	datpkgr/store.html#resetDatpkgrForTests,DatpkgrConfig	proc resetDatpkgrForTests(cfg: DatpkgrConfig)		67
+nim	seedPackagesTable	datpkgr/store.html#seedPackagesTable,DatpkgrConfig,JsonNode,string	proc seedPackagesTable(cfg: DatpkgrConfig; registryPackages: JsonNode; source: string): int		70
+nim	seedPackagesTableDefault	datpkgr/store.html#seedPackagesTableDefault,DatpkgrConfig,JsonNode	proc seedPackagesTableDefault(cfg: DatpkgrConfig; registryPackages: JsonNode): int		90
+nim	initDatpkgr	datpkgr/store.html#initDatpkgr,DatpkgrConfig	proc initDatpkgr(cfg: DatpkgrConfig)		112
+nim	refreshSource	datpkgr/store.html#refreshSource,DatpkgrConfig,string	proc refreshSource(cfg: DatpkgrConfig; sourceName: string): bool		473
+nim	refreshAllSources	datpkgr/store.html#refreshAllSources,DatpkgrConfig	proc refreshAllSources(cfg: DatpkgrConfig): bool		529
+nim	refreshRegistry	datpkgr/store.html#refreshRegistry,DatpkgrConfig	proc refreshRegistry(cfg: DatpkgrConfig): bool		539
+nim	withDatpkgrDB	datpkgr/store.html#withDatpkgrDB.t,DatpkgrConfig,untyped	template withDatpkgrDB(cfg: DatpkgrConfig; body: untyped)		542
+nim	isDevelopAvailable	datpkgr/store.html#isDevelopAvailable,DatpkgrConfig,string	proc isDevelopAvailable(cfg: DatpkgrConfig; pkgName: string): bool		546
+nim	fetchPkgMeta	datpkgr/store.html#fetchPkgMeta,DatpkgrConfig,string,string	proc fetchPkgMeta(cfg: DatpkgrConfig; pkgName: string; sourceFilter: string = ""): Option[\n    PkgRef]		555
+nim	fetchAllPkgMetas	datpkgr/store.html#fetchAllPkgMetas,DatpkgrConfig,string	proc fetchAllPkgMetas(cfg: DatpkgrConfig; pkgName: string): seq[PkgRef]		590
