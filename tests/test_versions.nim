@@ -128,11 +128,16 @@ suite "versions — readManifestContent tagless fallback":
     createDir(origin)
     defer: removeDir(origin)
     writeFile(origin / "manifest.json", """{"name":"taglessdep","version":"0.1.0"}""")
-    check execCmdEx("git -C " & origin & " init -q").exitCode == 0
-    check execCmdEx("git -C " & origin & " add .").exitCode == 0
-    check execCmdEx("git -C " & origin & " commit -qm init").exitCode == 0
+    # Hermetic git setup: don't rely on ambient global user.name/user.email
+    # (missing on GH ubuntu runners -> commit exits 128) and pin the branch
+    # so origin/HEAD resolution is deterministic across git defaults.
+    check execCmdEx("git -C " & origin.quoteShell & " init -q -b main").exitCode == 0
+    check execCmdEx("git -C " & origin.quoteShell & " config user.email \"test@example.com\"").exitCode == 0
+    check execCmdEx("git -C " & origin.quoteShell & " config user.name \"datpkgr-test\"").exitCode == 0
+    check execCmdEx("git -C " & origin.quoteShell & " add .").exitCode == 0
+    check execCmdEx("git -C " & origin.quoteShell & " commit -qm init").exitCode == 0
     let dest = cfg.pkgsCachePath() / "taglessdep"
-    check execCmdEx("git clone -q " & origin & " " & dest).exitCode == 0
+    check execCmdEx("git clone -q " & origin.quoteShell & " " & dest.quoteShell).exitCode == 0
     # no tags: tagForVersion finds nothing, but the HEAD fallback must serve it
     check tagForVersion(dest, "0.1.0") == ""
     check cfg.readManifestContent(dest, "taglessdep", "0.1.0").len > 0
