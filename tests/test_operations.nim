@@ -55,3 +55,16 @@ suite "operations — depName":
     check depName(PkgDependency(name: "spry", url: "")) == "spry"
     check depName(PkgDependency(name: "", url: "https://github.com/openpeeps/spry.git")) == "spry"
     check depName(PkgDependency(name: "", url: "")) == ""
+
+suite "operations — isRecordRoot":
+  test "normal install records only the requested package as root":
+    check isRecordRoot("tim", "tim", false, @[]) == true
+    check isRecordRoot("datpkgr", "tim", false, @[]) == false
+
+  test "depsOnly skips the root and marks its direct deps as roots":
+    check isRecordRoot("tim", "tim", true, @["datpkgr"]) == false
+    check isRecordRoot("datpkgr", "tim", true, @["datpkgr"]) == true
+    check isRecordRoot("malebolgia", "tim", true, @["datpkgr"]) == false
+
+  test "depsOnly with no direct deps records nothing as root":
+    check isRecordRoot("tim", "tim", true, @[]) == false

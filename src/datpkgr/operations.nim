@@ -65,6 +65,18 @@ proc isGitUrl*(s: string): bool =
 proc pluralize*(n: int, singular: string): string =
   singular & (if n == 1: "" else: "s")
 
+proc isRecordRoot*(name, curName: string, depsOnly: bool,
+    depsOnlyDirect: openArray[string]): bool =
+  ## Record-time root decision. Normally only the requested package is a root;
+  ## with `depsOnly` the root itself is skipped and its direct deps become
+  ## roots instead, so the installed closure survives pruning (same as local
+  ## installs, which record every direct dep as its own root).
+  if name == curName:
+    return not depsOnly
+  if depsOnly and name in depsOnlyDirect:
+    return true
+  false
+
 proc fetchEventText(name: string, count: int, cached: bool): string =
   if cached:
     result = name & " (cached)"
@@ -178,9 +190,12 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     constraint: VersionConstraint = VersionConstraint(kind: vcAny, version: newVersion(0, 0, 0)),
     backend = "c", sourceFilter: string = "",
     buildHook: proc(pkgName: string, preferRef: string, backend: string): bool = nil,
-    suppressSummary = false): bool =
+    suppressSummary = false, depsOnly = false): bool =
   ## Generic install via cfg. Returns true on success.
   ## `buildHook` is opt-in (builder stays in clue).
+  ## When `depsOnly` is true the requested package itself is skipped (no
+  ## files, no record, no build) and only its dependency closure is installed;
+  ## the root's direct deps are recorded as roots so pruning keeps them.
   let isOuter = installDepth == 0
   inc installDepth
   defer: dec installDepth
@@ -500,6 +515,18 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       else:
         verStrs[rp.name] = $rp.version
     cfg.logDebug("resolved " & $resolution.packages.len & " package(s)")
+    var depsOnlyDirect: seq[string] = @[]
+    if depsOnly:
+      # The loops below run in install (leaf-first) order, so the root's own
+      # iteration may come last — resolve its direct deps up front. They
+      # become roots so the installed closure survives pruning.
+      let rootVer = name2ver.getOrDefault(curName)
+      if rootVer.len > 0:
+        for d in cfg.getDeps(curName, rootVer, activeFeatOf.getOrDefault(curName),
+            url = pkgRefs.getOrDefault(curName).url):
+          let dn = depName(d)
+          if dn.len > 0 and dn notin depsOnlyDirect:
+            depsOnlyDirect.add(dn)
     if verbose:
       cfg.logInfo("Dependency tree")
       proc renderDepTree(name: string, leading: string, isLast: bool, isRoot: bool,
@@ -565,6 +592,10 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         cfg.logSuccess("Installing packages...")
         headerEmitted = true
     for rp in resolution.packages:
+      if depsOnly and rp.name == curName:
+        # --depsOnly: the requested package itself is never installed (no
+        # files, no label, no record) — only its dependency closure.
+        continue
       let meta = pkgRefs.getOrDefault(rp.name, PkgRef())
       let verStr = verStrs.getOrDefault(rp.name,
         if meta.refStr.len > 0: meta.refStr else: $rp.version)
@@ -676,6 +707,10 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
           warn("Failed to install " & jobs[i].name & " v" & jobs[i].verStr)
 
     for rp in resolution.packages:
+      if depsOnly and rp.name == curName:
+        # --depsOnly: no record for the requested package itself (its direct
+        # deps were resolved up front and become roots instead).
+        continue
       let meta = pkgRefs.getOrDefault(rp.name, PkgRef())
       let verStr = verStrs.getOrDefault(rp.name,
         if meta.refStr.len > 0: meta.refStr else: $rp.version)
@@ -692,7 +727,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         else:
           # fallback: use getDeps version as-is if unknown (should be rare)
           deps.add((dn, ""))
-      var isRoot = rp.name == curName
+      var isRoot = isRecordRoot(rp.name, curName, depsOnly, depsOnlyDirect)
       if rp.name in tagless and verStr == "HEAD":
         # Tagless packages have no real versions: any non-HEAD row for this
         # name is stale manifest-version junk from before the HEAD
@@ -720,10 +755,12 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     if not suppressSummary and isOuter:
       if installedCount > 0:
         cfg.logSuccess("Installed " & $installedCount & " " & pluralize(installedCount, "package"))
+      elif depsOnly:
+        cfg.logInfo(curName & " has no dependencies to install")
 
     cfg.pruneOrphans(verbose)
-    
-    if doBuild and buildHook != nil:
+
+    if doBuild and buildHook != nil and not depsOnly:
       if not buildHook(curName, rootMeta.refStr, backend):
         return false
     return true
