@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.0"
+version       = "0.1.1"
 author        = "George Lemon"
 description   = "App/Lang-agnostic package manager library"
 license       = "MIT"
