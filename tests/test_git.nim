@@ -1,5 +1,6 @@
-import std/[unittest, strtabs, strutils]
+import std/[unittest, strtabs, strutils, os, osproc, tempfiles]
 import datpkgr/git
+import datpkgr/config
 
 suite "git — toGitSshUrl":
   test "https URL becomes scp-like ssh url with .git suffix":
@@ -41,3 +42,73 @@ suite "git — gitEnv":
     check env["GIT_TERMINAL_PROMPT"] == "0"
     let env2 = gitEnv(nonInteractive = false)
     check not ("GIT_TERMINAL_PROMPT" in env2) or env2["GIT_TERMINAL_PROMPT"] != "0"
+
+proc makeSubmoduleFixture(): tuple[parent, base: string] =
+  ## Local parent repo with a `vendor/child` submodule (file-protocol).
+  let base = createTempDir("datpkgr_submod_", "")
+  let child = base / "child"
+  let parent = base / "parent"
+  createDir(child)
+  createDir(parent)
+  proc git(dir: string, args: string) =
+    let (outp, code) = execCmdEx("git -C " & quoteShell(dir) & " " & args)
+    check code == 0
+  for d in [child, parent]:
+    discard execCmdEx("git init -q " & quoteShell(d))
+    git(d, "config user.email t@t.t")
+    git(d, "config user.name t")
+  writeFile(child / "data.txt", "hello\n")
+  git(child, "add -A")
+  git(child, "commit -qm init")
+  writeFile(parent / "readme.txt", "parent\n")
+  git(parent, "add -A")
+  git(parent, "commit -qm init")
+  let (addOut, addCode) = execCmdEx("git -C " & quoteShell(parent) &
+    " -c protocol.file.allow=always submodule add -q " &
+    quoteShell(child) & " vendor/child")
+  check addCode == 0
+  git(parent, "commit -qm addsub")
+  (parent, base)
+
+suite "git — submodules (opt-in via allowSubmodules)":
+  test "disabled by default: submodule content absent":
+    let (parent, base) = makeSubmoduleFixture()
+    defer: removeDir(base)
+    let cfg = newDatpkgrConfig("submodtest", base / "root-off")
+    check not cfg.allowSubmodules
+    let dest = base / "clone-off"
+    check cfg.cloneRepo(parent, dest, nonInteractive = true)
+    check fileExists(dest / ".gitmodules")
+    check not fileExists(dest / "vendor" / "child" / "data.txt")
+
+  test "enabled: clone fetches submodule content":
+    let (parent, base) = makeSubmoduleFixture()
+    defer: removeDir(base)
+    let cfg = newDatpkgrConfig("submodtest", base / "root-on",
+      allowSubmodules = true)
+    let dest = base / "clone-on"
+    check cfg.cloneRepo(parent, dest, nonInteractive = true)
+    check fileExists(dest / "vendor" / "child" / "data.txt")
+
+  test "enabled: checkout heals a stale cache cloned without submodules":
+    let (parent, base) = makeSubmoduleFixture()
+    defer: removeDir(base)
+    let cfgOff = newDatpkgrConfig("submodtest", base / "root-heal",
+      allowSubmodules = false)
+    let dest = base / "clone-heal"
+    check cfgOff.cloneRepo(parent, dest, nonInteractive = true)
+    check not fileExists(dest / "vendor" / "child" / "data.txt")
+    let cfgOn = newDatpkgrConfig("submodtest", base / "root-heal",
+      allowSubmodules = true)
+    check cfgOn.checkoutHead(dest)
+    check fileExists(dest / "vendor" / "child" / "data.txt")
+
+  test "raw checkout honors explicit allowSubmodules flag":
+    let (parent, base) = makeSubmoduleFixture()
+    defer: removeDir(base)
+    let cfg = newDatpkgrConfig("submodtest", base / "root-raw")
+    let dest = base / "clone-raw"
+    check cfg.cloneRepo(parent, dest, nonInteractive = true)
+    check not fileExists(dest / "vendor" / "child" / "data.txt")
+    check checkoutHeadRaw(dest, allowSubmodules = true)
+    check fileExists(dest / "vendor" / "child" / "data.txt")

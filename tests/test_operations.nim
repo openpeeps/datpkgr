@@ -1,6 +1,17 @@
-import std/unittest
+import std/[os, tempfiles, unittest]
+import datpkgr/config
 import datpkgr/operations
 import datpkgr/types
+import helpers
+
+var submodCalls {.threadvar.}: seq[string]
+var capturedLog {.threadvar.}: seq[string]
+
+proc recordSubmod(name, dest: string) {.gcsafe.} =
+  submodCalls.add(name & "|" & dest)
+
+proc recordLog(level: LogLevel, msg: string) {.gcsafe.} =
+  capturedLog.add(msg)
 
 suite "operations — pkgNameFromUrl":
   test "github https url":
@@ -68,3 +79,53 @@ suite "operations — isRecordRoot":
 
   test "depsOnly with no direct deps records nothing as root":
     check isRecordRoot("tim", "tim", true, @[]) == false
+
+suite "operations — notifySubmodules":
+  test "destHasSubmodules reflects .gitmodules presence":
+    let dir = createTempDir("datpkgr_sub_", "")
+    defer: removeDir(dir)
+    check not destHasSubmodules(dir)
+    writeFile(dir / ".gitmodules", "[submodule \"vendor/child\"]\n")
+    check destHasSubmodules(dir)
+
+  test "fires onSubmodules when enabled and .gitmodules present":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.allowSubmodules = true
+    cfg.callbacks.onSubmodules = recordSubmod
+    let dir = createTempDir("datpkgr_sub_", "")
+    defer: removeDir(dir)
+    writeFile(dir / ".gitmodules", "[submodule \"vendor/child\"]\n")
+    submodCalls = @[]
+    cfg.notifySubmodules("zlib", dir)
+    check submodCalls == @["zlib|" & dir]
+
+  test "silent when disabled or without .gitmodules":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.allowSubmodules = true
+    cfg.callbacks.onSubmodules = recordSubmod
+    let bare = createTempDir("datpkgr_sub_", "")
+    defer: removeDir(bare)
+    submodCalls = @[]
+    cfg.notifySubmodules("zlib", bare)
+    check submodCalls.len == 0
+    let withSub = createTempDir("datpkgr_sub_", "")
+    defer: removeDir(withSub)
+    writeFile(withSub / ".gitmodules", "[submodule \"vendor/child\"]\n")
+    cfg.allowSubmodules = false
+    cfg.notifySubmodules("zlib", withSub)
+    check submodCalls.len == 0
+
+  test "falls back to indented log line without callback":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.allowSubmodules = true
+    cfg.callbacks.onSubmodules = nil
+    cfg.callbacks.log = recordLog
+    let dir = createTempDir("datpkgr_sub_", "")
+    defer: removeDir(dir)
+    writeFile(dir / ".gitmodules", "[submodule \"vendor/child\"]\n")
+    capturedLog = @[]
+    cfg.notifySubmodules("zlib", dir)
+    check capturedLog == @["    Installing with submodules"]

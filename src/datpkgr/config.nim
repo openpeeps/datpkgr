@@ -20,6 +20,10 @@ type
   Callbacks* = object
     log*: proc(level: LogLevel, msg: string) {.gcsafe.}
     onFetch*: proc(name: string, versions: int, cached: bool) {.gcsafe.}
+    onSubmodules*: proc(name, dest: string) {.gcsafe.}
+      ## Fired once a package is installed whose checkout carries git
+      ## submodules (`name` is the package, `dest` its cache checkout).
+      ## When nil, operations fall back to an indented log line.
 
   DatpkgrStores* = object
     db*: Store
@@ -41,6 +45,7 @@ type
     manifestParser*: ManifestParser
     manifestFinder*: ManifestFinder
     manifestFileName*: proc(pkgName: string): string
+    allowSubmodules*: bool
 
 type Config* = DatpkgrConfig
 
@@ -78,7 +83,7 @@ proc defaultManifestParser(content: string, path: string): Manifest =
   Manifest(path: path, name: path.splitFile.name, version: "", extra: newJObject())
 
 proc newDatpkgrConfig*(appName: string, rootPath = "", debugEnabled = false,
-    callbacks = Callbacks()): DatpkgrConfig =
+    callbacks = Callbacks(), allowSubmodules = false): DatpkgrConfig =
   let app = appName.strip()
   let root = if rootPath.len > 0: rootPath else: getHomeDir() / ("." & app)
   let drv = newLocalDriver(root)
@@ -100,7 +105,8 @@ proc newDatpkgrConfig*(appName: string, rootPath = "", debugEnabled = false,
     legacyRegistryPath: "",
     manifestParser: defaultManifestParser,
     manifestFinder: defaultManifestFinder,
-    manifestFileName: defaultManifestFileName
+    manifestFileName: defaultManifestFileName,
+    allowSubmodules: allowSubmodules
   )
 
 proc manifestNameForPkg*(cfg: DatpkgrConfig, pkgName: string): string =

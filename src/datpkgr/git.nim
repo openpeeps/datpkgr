@@ -83,29 +83,57 @@ proc toGitSshUrl*(url: string): string =
     path.add(".git")
   result = "git@" & host & ":" & path
 
+proc updateSubmodules*(cfg: DatpkgrConfig, dest: string): bool {.gcsafe.} =
+  ## Init/update submodules in `dest`. Only runs when `cfg.allowSubmodules`
+  ## is enabled; otherwise a no-op returning true. Warn-and-continue on
+  ## failure so a dead/private submodule never aborts the install.
+  if not cfg.allowSubmodules:
+    return true
+  if not fileExists(dest / ".gitmodules"):
+    return true
+  let (_, code) = cfg.gitExec("git -C " & quoteShell(dest) &
+    " -c protocol.file.allow=always submodule update --init --recursive --quiet")
+  if code != 0:
+    cfg.logWarn("Failed to init submodules in " & dest & " - continuing with partial content")
+  true
+
+proc updateSubmodulesRaw*(dest: string, allowSubmodules = false): bool {.gcsafe.} =
+  ## Thread-safe submodule init without touching `cfg` (usable off main thread).
+  if not allowSubmodules:
+    return true
+  if not fileExists(dest / ".gitmodules"):
+    return true
+  let (_, code) = gitExecRaw("git -C " & quoteShell(dest) &
+    " -c protocol.file.allow=always submodule update --init --recursive --quiet")
+  code == 0
+
 proc cloneRepo*(cfg: DatpkgrConfig, url, dest: string, nonInteractive = false): bool {.gcsafe.} =
   let env = gitEnv(nonInteractive)
-  let (o1, c1) = cfg.gitExec("git clone " & toGitSshUrl(url) & " " & dest, env = env)
+  let subFlag = if cfg.allowSubmodules: " --recurse-submodules" else: ""
+  let (o1, c1) = cfg.gitExec("git -c protocol.file.allow=always clone" & subFlag & " " & toGitSshUrl(url) & " " & quoteShell(dest), env = env)
   if c1 == 0:
-    discard cfg.gitExec("git -C " & dest & " fetch --tags --quiet", env = env)
+    discard cfg.gitExec("git -C " & quoteShell(dest) & " fetch --tags --quiet", env = env)
+    discard cfg.updateSubmodules(dest)
     return true
-  let (o2, c2) = cfg.gitExec("git clone " & url & " " & dest, env = env)
+  let (o2, c2) = cfg.gitExec("git -c protocol.file.allow=always clone" & subFlag & " " & url & " " & quoteShell(dest), env = env)
   if c2 == 0:
-    discard cfg.gitExec("git -C " & dest & " fetch --tags --quiet", env = env)
+    discard cfg.gitExec("git -C " & quoteShell(dest) & " fetch --tags --quiet", env = env)
+    discard cfg.updateSubmodules(dest)
     return true
   false
 
 proc refreshRemoteTags*(cfg: DatpkgrConfig, dest, url: string, nonInteractive = false): bool {.gcsafe.} =
-  discard cfg.gitExec("git -C " & dest & " remote set-url origin " & toGitSshUrl(url))
+  discard cfg.gitExec("git -C " & quoteShell(dest) & " remote set-url origin " & toGitSshUrl(url))
   let env = gitEnv(nonInteractive)
-  let (output, exitCode) = cfg.gitExec("git -C " & dest &
+  let (output, exitCode) = cfg.gitExec("git -C " & quoteShell(dest) &
     " fetch --tags --prune --quiet", env = env)
   if exitCode != 0:
-    discard cfg.gitExec("git -C " & dest & " remote set-url origin " & url)
-    let (out2, code2) = cfg.gitExec("git -C " & dest &
+    discard cfg.gitExec("git -C " & quoteShell(dest) & " remote set-url origin " & url)
+    let (out2, code2) = cfg.gitExec("git -C " & quoteShell(dest) &
       " fetch --tags --prune --quiet", env = env)
     if code2 != 0:
       return false
+  discard cfg.updateSubmodules(dest)
   true
 
 proc clonePackage*(cfg: DatpkgrConfig, url, dest: string, refresh = false, nonInteractive = false): bool =
@@ -126,68 +154,83 @@ proc clonePackage*(cfg: DatpkgrConfig, url, dest: string, refresh = false, nonIn
   false
 
 proc checkoutTag*(cfg: DatpkgrConfig, dest, tag: string): bool =
-  let (output, code) = cfg.gitExec("git -C " & dest & " checkout " & tag & " --quiet")
-  code == 0
+  let (output, code) = cfg.gitExec("git -C " & quoteShell(dest) & " checkout " & quoteShell(tag) & " --quiet")
+  if code != 0:
+    return false
+  discard cfg.updateSubmodules(dest)
+  true
 
 proc checkoutHead*(cfg: DatpkgrConfig, dest: string, refresh = false): bool =
   if refresh:
-    discard cfg.gitExec("git -C " & dest & " fetch origin --quiet", env = gitEnv())
-  let (defOut, _) = cfg.gitExec("git -C " & dest &
+    discard cfg.gitExec("git -C " & quoteShell(dest) & " fetch origin --quiet", env = gitEnv())
+  let (defOut, _) = cfg.gitExec("git -C " & quoteShell(dest) &
     " symbolic-ref --quiet refs/remotes/origin/HEAD")
   var branch = defOut.strip()
   if branch.startsWith("refs/remotes/origin/"):
     branch = branch["refs/remotes/origin/".len .. ^1]
   if branch.len == 0:
     branch = "master"
-  let (output, code) = cfg.gitExec("git -C " & dest &
+  let (output, code) = cfg.gitExec("git -C " & quoteShell(dest) &
     " checkout -q origin/" & branch & " --")
   if code == 0:
+    discard cfg.updateSubmodules(dest)
     return true
   for b in ["master", "main"]:
-    let (out2, code2) = cfg.gitExec("git -C " & dest &
+    let (out2, code2) = cfg.gitExec("git -C " & quoteShell(dest) &
       " checkout -q origin/" & b & " --")
     if code2 == 0:
+      discard cfg.updateSubmodules(dest)
       return true
   false
 
 proc checkoutRef*(cfg: DatpkgrConfig, dest, refStr: string, refresh = false): bool =
   if refStr.len > 0 and refStr.toLowerAscii == "head":
     return cfg.checkoutHead(dest, refresh)
-  discard cfg.gitExec("git -C " & dest & " fetch origin " & refStr & " --quiet",
+  discard cfg.gitExec("git -C " & quoteShell(dest) & " fetch origin " & quoteShell(refStr) & " --quiet",
     env = gitEnv())
-  let (output, code) = cfg.gitExec("git -C " & dest & " checkout " & refStr & " --quiet")
+  let (output, code) = cfg.gitExec("git -C " & quoteShell(dest) & " checkout " & quoteShell(refStr) & " --quiet")
   if code != 0:
     cfg.logWarn("Branch or ref '" & refStr & "' not found. Check the spelling.")
-  code == 0
+    return false
+  discard cfg.updateSubmodules(dest)
+  true
 
-proc checkoutTagRaw*(dest, tag: string): bool {.gcsafe.} =
-  let (output, code) = gitExecRaw("git -C " & dest & " checkout " & tag & " --quiet")
-  code == 0
+proc checkoutTagRaw*(dest, tag: string, allowSubmodules = false): bool {.gcsafe.} =
+  let (output, code) = gitExecRaw("git -C " & quoteShell(dest) & " checkout " & quoteShell(tag) & " --quiet")
+  if code != 0:
+    return false
+  discard updateSubmodulesRaw(dest, allowSubmodules)
+  true
 
-proc checkoutHeadRaw*(dest: string, refresh = false): bool {.gcsafe.} =
+proc checkoutHeadRaw*(dest: string, refresh = false, allowSubmodules = false): bool {.gcsafe.} =
   if refresh:
-    discard gitExecRaw("git -C " & dest & " fetch origin --quiet", env = gitEnv())
-  let (defOut, _) = gitExecRaw("git -C " & dest & " symbolic-ref --quiet refs/remotes/origin/HEAD")
+    discard gitExecRaw("git -C " & quoteShell(dest) & " fetch origin --quiet", env = gitEnv())
+  let (defOut, _) = gitExecRaw("git -C " & quoteShell(dest) & " symbolic-ref --quiet refs/remotes/origin/HEAD")
   var branch = defOut.strip()
   if branch.startsWith("refs/remotes/origin/"):
     branch = branch["refs/remotes/origin/".len .. ^1]
   if branch.len == 0:
     branch = "master"
-  let (output, code) = gitExecRaw("git -C " & dest & " checkout -q origin/" & branch & " --")
+  let (output, code) = gitExecRaw("git -C " & quoteShell(dest) & " checkout -q origin/" & branch & " --")
   if code == 0:
+    discard updateSubmodulesRaw(dest, allowSubmodules)
     return true
   for b in ["master", "main"]:
-    let (out2, code2) = gitExecRaw("git -C " & dest & " checkout -q origin/" & b & " --")
+    let (out2, code2) = gitExecRaw("git -C " & quoteShell(dest) & " checkout -q origin/" & b & " --")
     if code2 == 0:
+      discard updateSubmodulesRaw(dest, allowSubmodules)
       return true
   false
 
-proc checkoutRefRaw*(dest, refStr: string, refresh = false): bool {.gcsafe.} =
+proc checkoutRefRaw*(dest, refStr: string, refresh = false, allowSubmodules = false): bool {.gcsafe.} =
   if refStr.len > 0 and refStr.toLowerAscii == "head":
-    return checkoutHeadRaw(dest, refresh)
-  discard gitExecRaw("git -C " & dest & " fetch origin " & refStr & " --quiet", env = gitEnv())
-  let (output, code) = gitExecRaw("git -C " & dest & " checkout " & refStr & " --quiet")
-  code == 0
+    return checkoutHeadRaw(dest, refresh, allowSubmodules)
+  discard gitExecRaw("git -C " & quoteShell(dest) & " fetch origin " & quoteShell(refStr) & " --quiet", env = gitEnv())
+  let (output, code) = gitExecRaw("git -C " & quoteShell(dest) & " checkout " & quoteShell(refStr) & " --quiet")
+  if code != 0:
+    return false
+  discard updateSubmodulesRaw(dest, allowSubmodules)
+  true
 
 type
   GitHeadInfo* = object

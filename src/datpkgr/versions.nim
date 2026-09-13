@@ -356,7 +356,8 @@ proc discoverVersions*(cfg: DatpkgrConfig, name, url: string, refresh = false,
   cfg.cacheVersions(name, result)
 
 type
-  TagFetchJob = tuple[name: string, url: string, dest: string, refresh: bool]
+  TagFetchJob = tuple[name: string, url: string, dest: string, refresh: bool,
+    allowSubmodules: bool]
 
 proc fetchTagsJob(job: TagFetchJob): tuple[name: string, tags: seq[string]] {.gcsafe.} =
   ## Worker for `discoverVersionsBatch`: ensures the package is present in
@@ -369,13 +370,15 @@ proc fetchTagsJob(job: TagFetchJob): tuple[name: string, tags: seq[string]] {.gc
   try: existsDest = tmpCfgCheck.driver.exists(relativePath(dest, tmpCfgCheck.rootPath))
   except: discard
   if not existsDest:
-    let tmpCfg = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(), debugEnabled = false)
+    let tmpCfg = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(),
+      debugEnabled = false, allowSubmodules = job.allowSubmodules)
     if tmpCfg.cloneRepo(job.url, dest, nonInteractive = true):
       discard
     else:
       return (job.name, @[])
   elif job.refresh:
-    let tmpCfg = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(), debugEnabled = false)
+    let tmpCfg = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(),
+      debugEnabled = false, allowSubmodules = job.allowSubmodules)
     discard tmpCfg.refreshRemoteTags(dest, job.url, nonInteractive = true)
   let tmpCfg2 = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(), debugEnabled = false)
   let tags =
@@ -416,7 +419,7 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
     var m = createMaster()
     m.awaitAll:
       for i, pkg in toFetch:
-        m.spawn fetchTagsJob((pkg.name, pkg.url, cfg.pkgsCachePath() / pkg.name, refresh)) ->
+        m.spawn fetchTagsJob((pkg.name, pkg.url, cfg.pkgsCachePath() / pkg.name, refresh, cfg.allowSubmodules)) ->
           results[i]
     for i in 0 ..< toFetch.len:
       let (name, tags) = results[i]

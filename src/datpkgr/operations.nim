@@ -24,6 +24,7 @@ import ./resolver
 var installLogLock: Lock
 installLogLock.initLock()
 var pendingLogFn: proc(level: LogLevel, msg: string) {.gcsafe.}
+var pendingSubmodulesFn: proc(name, dest: string) {.gcsafe.}
 
 # ----------------------------------------------------------------------
 # helpers (from manager.nim)
@@ -65,6 +66,23 @@ proc isGitUrl*(s: string): bool =
 proc pluralize*(n: int, singular: string): string =
   singular & (if n == 1: "" else: "s")
 
+proc destHasSubmodules*(cacheDir: string): bool {.gcsafe.} =
+  ## True when `cacheDir` is a checkout carrying git submodules.
+  fileExists(cacheDir / ".gitmodules")
+
+proc notifySubmodules*(cfg: DatpkgrConfig, name, cacheDir: string) =
+  ## Fire `onSubmodules` when `cacheDir` carries submodules and the feature
+  ## is enabled; falls back to an indented log line when no callback is wired.
+  ## Main-thread only (touches cfg callbacks).
+  if not cfg.allowSubmodules:
+    return
+  if not destHasSubmodules(cacheDir):
+    return
+  if cfg.callbacks.onSubmodules != nil:
+    cfg.callbacks.onSubmodules(name, cacheDir)
+  else:
+    cfg.logInfo("    Installing with submodules")
+
 proc isRecordRoot*(name, curName: string, depsOnly: bool,
     depsOnlyDirect: openArray[string]): bool =
   ## Record-time root decision. Normally only the requested package is a root;
@@ -97,6 +115,7 @@ type
     refStr: string
     verStr: string
     refresh: bool
+    allowSubmodules: bool
     label: string
     manifestPath: string
     srcDir: string
@@ -128,19 +147,19 @@ proc manifestForJob(job: InstallJob): Manifest =
 
 proc installResolvedPkg(job: InstallJob): bool {.gcsafe.} =
   if job.refStr.len > 0:
-    if not checkoutRefRaw(job.cacheDir, job.refStr, job.refresh):
+    if not checkoutRefRaw(job.cacheDir, job.refStr, job.refresh, job.allowSubmodules):
       return false
   elif job.verStr == "HEAD":
     # Tagless repo: pin the working copy to the default branch HEAD so a
     # stale tag checkout from a previous run can never leak in.
-    discard checkoutHeadRaw(job.cacheDir, job.refresh)
+    discard checkoutHeadRaw(job.cacheDir, job.refresh, job.allowSubmodules)
   elif job.verStr != "0.0.0":
     let tag = tagForVersion(job.cacheDir, job.verStr)
     if tag.len > 0:
-      discard checkoutTagRaw(job.cacheDir, tag)
+      discard checkoutTagRaw(job.cacheDir, tag, job.allowSubmodules)
     else:
       # No tag matches (tagless repo seen via manifest version) — HEAD.
-      discard checkoutHeadRaw(job.cacheDir, job.refresh)
+      discard checkoutHeadRaw(job.cacheDir, job.refresh, job.allowSubmodules)
   try:
     let m = manifestForJob(job)
     # Use flysystem when possible via tmpCfg derived from verDir root
@@ -160,6 +179,11 @@ proc loggedInstall(job: InstallJob, lbl: string): bool {.gcsafe.} =
       if pendingLogFn != nil:
         withLock installLogLock:
           pendingLogFn(lvlInfo, "  " & lbl)
+          if job.allowSubmodules and destHasSubmodules(job.cacheDir):
+            if pendingSubmodulesFn != nil:
+              pendingSubmodulesFn(job.name, job.cacheDir)
+            else:
+              pendingLogFn(lvlInfo, "    Installing with submodules")
   ok
 
 proc manifestCanonicalName(cfg: DatpkgrConfig, manifestPath: string): string =
@@ -639,6 +663,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
           ensureHeader()
           withLock installLogLock:
             cfg.callbacks.log(lvlInfo, "  " & lbl)
+          cfg.notifySubmodules(rp.name, cacheDir)
         continue
       # build Manifest for installCleanCopy via cfg
       let manifestPath = cfg.findManifestInDir(cacheDir)
@@ -679,7 +704,8 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       let ex = manifest.extra
       let srcDirVal = if ex != nil and ex.hasKey("srcDir"): ex["srcDir"].getStr else: ""
       jobs.add(InstallJob(name: rp.name, cacheDir: cacheDir, verDir: verDir,
-        refStr: meta.refStr, verStr: verStr, refresh: refresh, label: label,
+        refStr: meta.refStr, verStr: verStr, refresh: refresh,
+        allowSubmodules: cfg.allowSubmodules, label: label,
         manifestPath: manifest.path, srcDir: srcDirVal,
         installDirs: getStrSeq(ex, "installDirs"),
         installFiles: getStrSeq(ex, "installFiles"),
@@ -693,12 +719,14 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       for i, j in jobs:
         jobLabels[i] = formatLabel(j.name, j.verStr)
       pendingLogFn = cfg.callbacks.log
+      pendingSubmodulesFn = cfg.callbacks.onSubmodules
       var m = createMaster()
       m.awaitAll:
         for i, job in jobs:
           let lbl = jobLabels[i]
           m.spawn loggedInstall(job, lbl) -> results[i]
       pendingLogFn = nil
+      pendingSubmodulesFn = nil
       for i, ok in results:
         if ok:
           installedCount.inc
