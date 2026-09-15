@@ -206,6 +206,47 @@ proc manifestCanonicalName(cfg: DatpkgrConfig, manifestPath: string): string =
 # core install
 # ----------------------------------------------------------------------
 
+proc resolveRootMeta*(cfg: DatpkgrConfig, name, sourceFilter: string): Option[PkgRef] =
+  ## Root metadata lookup: the requested source (or the default source) first,
+  ## then any known source. The fallback covers packages that live in no
+  ## configured registry source — e.g. `direct` rows recorded for locally- or
+  ## URL-installed packages — so dependents resolve without `--source`.
+  ## Develop-mode checkouts still win outright inside `fetchPkgMeta`.
+  let effectiveSource = if sourceFilter.len > 0: sourceFilter else: cfg.defaultSourceName
+  let direct = cfg.fetchPkgMeta(name, effectiveSource)
+  if direct.isSome:
+    return direct
+  if effectiveSource.len > 0:
+    let fallback = cfg.fetchPkgMeta(name)
+    if fallback.isSome:
+      cfg.logInfo("Package '" & name & "' resolved from another source " &
+        "(requested '" & effectiveSource & "')")
+      return fallback
+  none(PkgRef)
+
+proc ensureDirectPackageRecord*(cfg: DatpkgrConfig, name, url, description,
+    license: string, meth = "git") =
+  ## Record `name` in the `packages` table as source `direct` when no row
+  ## exists yet, so dependents can resolve locally- or URL-installed packages
+  ## that live in no configured registry source. No-op when a row exists.
+  try:
+    cfg.withDatpkgrDB do:
+      let tbl = cfg.stores.db.getTable("packages").get()
+      if tbl.where("name", newTextValue(name)).toSeq().len > 0:
+        return
+      discard cfg.stores.db.insertRow("packages", row({
+        "name": newTextValue(name),
+        "url": newTextValue(url),
+        "method": newTextValue(meth),
+        "tags": newJsonValue(newJArray()),
+        "description": newTextValue(description),
+        "license": newTextValue(license),
+        "web": newTextValue(""),
+        "source": newTextValue("direct")
+      }))
+      cfg.stores.db.checkpoint()
+  except: discard
+
 var installDepth {.threadvar.}: int
 
 proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
@@ -238,8 +279,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     if url.len > 0:
       rootMeta = PkgRef(name: curName, url: url, refStr: "")
     else:
-      let effectiveSource = if sourceFilter.len > 0: sourceFilter else: cfg.defaultSourceName
-      let rootMetaOpt = cfg.fetchPkgMeta(curName, effectiveSource)
+      let rootMetaOpt = cfg.resolveRootMeta(curName, sourceFilter)
       if rootMetaOpt.isNone:
         fail("Package not found in registry: " & curName &
           (if sourceFilter.len > 0: " (source: " & sourceFilter & ")" else: ""))
@@ -298,32 +338,18 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
               try: moveDir(derivedInstBase, canonicalInstBase) except: discard
           curName = canonical
           rootMeta.name = canonical
-          try:
-            let tbl = cfg.stores.db.getTable("packages").get()
-            let exists = tbl.where("name", newTextValue(curName)).toSeq().len > 0
-            if not exists:
-              var desc = ""
-              var lic = ""
-              try:
-                let content =
-                  try: cfg.driver.read(relativePath(nf, cfg.rootPath))
-                  except: readFile(nf)
-                let m = cfg.parseManifest(content, nf)
-                desc = m.description
-                lic = m.license
-              except: discard
-              discard cfg.stores.db.insertRow("packages", row({
-                "name": newTextValue(curName),
-                "url": newTextValue(rootMeta.url),
-                "method": newTextValue("git"),
-                "tags": newJsonValue(newJArray()),
-                "description": newTextValue(desc),
-                "license": newTextValue(lic),
-                "web": newTextValue(""),
-                "source": newTextValue("direct")
-              }))
-              cfg.stores.db.checkpoint()
-          except: discard
+          var desc = ""
+          var lic = ""
+          if nf.len > 0:
+            try:
+              let content =
+                try: cfg.driver.read(relativePath(nf, cfg.rootPath))
+                except: readFile(nf)
+              let m = cfg.parseManifest(content, nf)
+              desc = m.description
+              lic = m.license
+            except: discard
+          cfg.ensureDirectPackageRecord(curName, rootMeta.url, desc, lic)
 
     var rootConstraint = constraint
     if pkgRef.len > 0:

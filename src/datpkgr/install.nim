@@ -60,28 +60,51 @@ proc installedPath*(cfg: DatpkgrConfig, name, version: string): string =
 
 proc warnDevShadow(cfg: DatpkgrConfig, name, chosenPath: string)
 
+proc developRecordPath*(cfg: DatpkgrConfig, name: string): string =
+  ## The develop checkout path for `name` (symlink-expanded) when in develop
+  ## mode, else "". An explicit editable checkout beats version ordering.
+  if cfg.isDevelopAvailable(name):
+    var p = cfg.developPath() / name
+    try: p = expandSymlink(p) except: discard
+    return p
+  ""
+
 proc resolveInstalledPath*(cfg: DatpkgrConfig, name, preferRef: string): string =
   ## The recorded `--path` for an installed package, preferring the explicit ref
   ## (branch/tag) when given, else the latest semver version.
+  ## A develop-mode checkout always wins unpinned lookups: an explicit editable
+  ## source beats version ordering. An explicit `preferRef` pin is still honored
+  ## when it names a registry version the develop checkout does not satisfy.
   var chosen = ""
   cfg.withDatpkgrDB do:
     let tbl = cfg.stores.db.getTable("installed").get()
-    var bestVer = newVersion(0, 0, 0)
-    for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():
-      let ver = row["version"].strVal
-      if ver.len > 0 and ver == preferRef:
-        chosen = row["path"].strVal
-        break
-      try:
-        let v = parseVersion(ver)
-        if v > bestVer:
-          bestVer = v
+    let devPath = cfg.developRecordPath(name)
+    var devVer = ""
+    if devPath.len > 0:
+      for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():
+        let p = row["path"].strVal
+        if p.len > 0 and not cfg.isInsidePkgs(p):
+          devVer = row["version"].strVal
+          break
+    if devPath.len > 0 and (preferRef.len == 0 or devVer == preferRef):
+      chosen = devPath
+    else:
+      var bestVer = newVersion(0, 0, 0)
+      for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():
+        let ver = row["version"].strVal
+        if ver.len > 0 and ver == preferRef:
           chosen = row["path"].strVal
-      except CatchableError:
-        # Non-semver version (e.g. git ref like "head") — use as fallback
-        # when no semver match has been found yet.
-        if chosen.len == 0:
-          chosen = row["path"].strVal
+          break
+        try:
+          let v = parseVersion(ver)
+          if v > bestVer:
+            bestVer = v
+            chosen = row["path"].strVal
+        except CatchableError:
+          # Non-semver version (e.g. git ref like "head") — use as fallback
+          # when no semver match has been found yet.
+          if chosen.len == 0:
+            chosen = row["path"].strVal
   if chosen.len > 0:
     cfg.warnDevShadow(name, chosen)
     return chosen
@@ -261,10 +284,20 @@ proc allInstalledPaths*(cfg: DatpkgrConfig, ): seq[string] =
   ## upstream, so they rank above any fixed semver version. Without this,
   ## tagless packages (sole `HEAD` record) vanish from every `--path` list and
   ## dependents fail with `cannot open file` even though they are installed.
+  ## A develop-mode checkout always wins for its package: an explicit editable
+  ## source beats version ordering (rolling or semver).
   var bestBy: Table[string, tuple[ver: Version, path: string, rolling: bool]]
+  var devPaths = initTable[string, string]()
   cfg.withDatpkgrDB do:
     for (pk, row) in cfg.stores.db.getTable("installed").get().allRows():
       let name = row["name"].strVal
+      if not devPaths.hasKey(name):
+        devPaths[name] = cfg.developRecordPath(name)
+      if devPaths[name].len > 0:
+        var dv = newVersion(0, 0, 0)
+        try: dv = parseVersion(row["version"].strVal) except CatchableError: discard
+        bestBy[name] = (dv, devPaths[name], false)
+        continue
       let verStr = row["version"].strVal
       try:
         let v = parseVersion(verStr)

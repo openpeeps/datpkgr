@@ -1,6 +1,8 @@
-import std/[os, tempfiles, unittest]
+import std/[os, tempfiles, unittest, options, json]
 import datpkgr/config
 import datpkgr/operations
+import datpkgr/install
+import datpkgr/store
 import datpkgr/types
 import helpers
 
@@ -129,3 +131,65 @@ suite "operations — notifySubmodules":
     capturedLog = @[]
     cfg.notifySubmodules("zlib", dir)
     check capturedLog == @["    Installing with submodules"]
+
+suite "operations — ensureDirectPackageRecord":
+  test "inserts a direct row once":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    cfg.ensureDirectPackageRecord("localpkg", "", "a local package", "MIT", "local")
+    let m = cfg.fetchPkgMeta("localpkg", "direct")
+    check m.isSome
+    check m.get().url == ""
+    # second call with different details must not duplicate
+    cfg.ensureDirectPackageRecord("localpkg", "https://example.com/other", "changed", "MIT")
+    check cfg.fetchAllPkgMetas("localpkg").len == 1
+    # visible under its own source only, not the default one
+    check cfg.fetchPkgMeta("localpkg", "nim-lang").isNone
+
+suite "operations — resolveRootMeta":
+  test "falls back to another source when the requested one misses":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.defaultSourceName = "nim-lang"
+    cfg.defaultRegistryUrl = "https://example.com/a.json"
+    cfg.initDatpkgr()
+    let data = %*[{"name": "directonly", "url": "https://github.com/org/directonly", "method": "git",
+      "tags": [], "description": "d", "license": "MIT", "web": "https://example.com"}]
+    discard cfg.seedPackagesTable(data, "direct")
+    let m = cfg.resolveRootMeta("directonly", "")
+    check m.isSome
+    check m.get().url == "https://github.com/org/directonly"
+    let m2 = cfg.resolveRootMeta("directonly", "nim-lang")
+    check m2.isSome
+    check cfg.resolveRootMeta("missing", "").isNone
+
+  test "prefers the requested source on a direct hit":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.defaultSourceName = "nim-lang"
+    cfg.defaultRegistryUrl = "https://example.com/a.json"
+    cfg.initDatpkgr()
+    let data = %*[{"name": "pkg", "url": "https://github.com/org/pkg", "method": "git",
+      "tags": [], "description": "d", "license": "MIT", "web": "https://example.com"}]
+    discard cfg.seedPackagesTable(data, "nim-lang")
+    discard cfg.seedPackagesTable(data, "direct")
+    cfg.saveSources(@[Source(name: "nim-lang", url: "https://example.com/a.json"),
+                      Source(name: "direct", url: "https://example.com/b.json")])
+    let m = cfg.resolveRootMeta("pkg", "")
+    check m.isSome
+    check m.get().url == "https://github.com/org/pkg"
+
+suite "operations — installPackage develop root":
+  test "develop checkout installs with no registry row and no network":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.manifestParser = fakeParser
+    cfg.initDatpkgr()
+    let srcDir = createTempDir("datpkgr_devsrc_", "")
+    defer: removeDir(srcDir)
+    writeFile(srcDir / "manifest.json", "version = \"1.2.3\"\n")
+    createSymlink(srcDir, cfg.developPath() / "devpkg")
+    check cfg.fetchPkgMeta("devpkg", "nim-lang").isSome
+    check cfg.installPackage("devpkg", verbose = false, suppressSummary = true)
+    check cfg.installedRecords("devpkg").len == 1

@@ -1,4 +1,4 @@
-import std/[os, unittest, tables, sequtils, json]
+import std/[os, unittest, tables, sequtils, json, tempfiles]
 import pkg/semver
 import pkg/boogie/stores/rdbms
 import datpkgr/config
@@ -146,3 +146,50 @@ suite "install — record and query":
     createDir(cfg.pkgsPath() / "pkg" / "1.0.0")
     createDir(cfg.pkgsPath() / "pkg" / "HEAD")
     check cfg.resolveDepPathLike("pkg") == cfg.pkgsPath() / "pkg" / "HEAD"
+
+  test "resolveInstalledPath prefers develop checkout over newer registry copy":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    cfg.recordInstall("pkg", "9.9.9", @[], root=false, installPath=cfg.pkgsPath()/"pkg"/"9.9.9")
+    let srcDir = createTempDir("datpkgr_devsrc_", "")
+    defer: removeDir(srcDir)
+    createSymlink(srcDir, cfg.developPath() / "pkg")
+    cfg.recordInstall("pkg", "0.1.0", @[], root=true, installPath=cfg.developPath()/"pkg")
+    check cfg.resolveInstalledPath("pkg", "") == expandSymlink(cfg.developPath() / "pkg")
+
+  test "resolveInstalledPath honors an explicit ref pin over develop":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    cfg.recordInstall("pkg", "0.2.0", @[], root=false, installPath=cfg.pkgsPath()/"pkg"/"0.2.0")
+    let srcDir = createTempDir("datpkgr_devsrc_", "")
+    defer: removeDir(srcDir)
+    createSymlink(srcDir, cfg.developPath() / "pkg")
+    cfg.recordInstall("pkg", "0.1.0", @[], root=true, installPath=cfg.developPath()/"pkg")
+    # pin names the registry version the checkout does not satisfy
+    check cfg.resolveInstalledPath("pkg", "0.2.0") == cfg.pkgsPath()/"pkg"/"0.2.0"
+    # pin matching the checkout version still resolves to develop
+    check cfg.resolveInstalledPath("pkg", "0.1.0") == expandSymlink(cfg.developPath() / "pkg")
+
+  test "resolveInstalledPath uses develop with no installed record":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    let srcDir = createTempDir("datpkgr_devsrc_", "")
+    defer: removeDir(srcDir)
+    createSymlink(srcDir, cfg.developPath() / "pkg")
+    check cfg.resolveInstalledPath("pkg", "") == expandSymlink(cfg.developPath() / "pkg")
+
+  test "allInstalledPaths prefers develop over newer registry copy":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    cfg.recordInstall("pkg", "9.9.9", @[], root=false, installPath=cfg.pkgsPath()/"pkg"/"9.9.9")
+    let srcDir = createTempDir("datpkgr_devsrc_", "")
+    defer: removeDir(srcDir)
+    createSymlink(srcDir, cfg.developPath() / "pkg")
+    cfg.recordInstall("pkg", "0.1.0", @[], root=true, installPath=cfg.developPath()/"pkg")
+    let paths = cfg.allInstalledPaths()
+    check paths.len == 1
+    check expandSymlink(cfg.developPath() / "pkg") in paths
