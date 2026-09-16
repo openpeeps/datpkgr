@@ -6,6 +6,7 @@
 
 import std/[os, osproc, strutils, options, sequtils, tables, times]
 import pkg/boogie/stores/rdbms
+import pkg/boogie/crashsafe
 import pkg/openparser/json
 import pkg/semver
 import pkg/flysystem
@@ -19,6 +20,30 @@ export rdbms
 proc debugLog*(cfg: DatpkgrConfig, msg: string) =
   if cfg.debugEnabled:
     cfg.logDebug(msg)
+
+var datpkgrSignalsArmed = false
+
+proc ensureDatpkgrSignalHandlers() =
+  ## Boogie's crashsafe auto-flushes every registered store WAL on normal
+  ## exit, on SIGINT/SIGTERM/SIGHUP/SIGQUIT (watcher thread) and best-effort
+  ## on fatal signals. Catching a termination signal replaces its default
+  ## disposition, so without an explicit quit the process would survive
+  ## Ctrl+C after merely flushing. Arm graceful quit here (flush, then exit
+  ## with the conventional codes). SIGHUP/SIGQUIT keep boogie's flush-only
+  ## behavior. Safe to call repeatedly; idempotent per process.
+  when compileOption("threads"):
+    if datpkgrSignalsArmed:
+      return
+    datpkgrSignalsArmed = true
+    installCrashHandlers()
+    discard listenSignal(SignalInt, proc(sig: cint) {.closure, gcsafe.} =
+      flushAllStores()
+      quit(130))
+    discard listenSignal(SignalTerm, proc(sig: cint) {.closure, gcsafe.} =
+      flushAllStores()
+      quit(143))
+  else:
+    installCrashHandlers()
 
 proc isValidSourceName*(s: string): bool =
   if s.len == 0: return false
@@ -122,9 +147,12 @@ proc initDatpkgr*(cfg: DatpkgrConfig) =
 
   var hasDatabase = fileExists(cfg.dbPath())
   cfg.stores.db = newStore(cfg.dbPath(), StorageMode.smDisk,
-                    enableWal = true, walFlushEveryOps = 100'u32)
+                    enableWal = true, walFlushEveryOps = 100'u32,
+                    enableConcurrency = true)
   cfg.stores.versionsDB = newStore(cfg.versionsDBPath(), StorageMode.smDisk,
-                        enableWal = true, walFlushEveryOps = 100'u32)
+                        enableWal = true, walFlushEveryOps = 100'u32,
+                        enableConcurrency = true)
+  ensureDatpkgrSignalHandlers()
 
   cfg.stores.db.createTableIfNotExist(newTable(
     name = "packages",
@@ -542,6 +570,26 @@ proc refreshRegistry*(cfg: DatpkgrConfig): bool =
 template withDatpkgrDB*(cfg: DatpkgrConfig, body: untyped) =
   cfg.initDatpkgr()
   body
+
+proc closeDatpkgr*(cfg: DatpkgrConfig) =
+  ## Graceful shutdown for long-lived hosts: flushes then closes both
+  ## stores (joins the concurrent write worker, unregisters the crashsafe
+  ## hooks, releases the cross-process file lock). Safe to call repeatedly;
+  ## the next `withDatpkgrDB` re-opens via `initDatpkgr`. Signal and exit
+  ## paths stay flush-only (boogie owns them); call this on clean shutdown.
+  if cfg == nil or not cfg.stores.initialized:
+    return
+  cfg.stores.initialized = false
+  try:
+    cfg.stores.db.checkpoint()
+    cfg.stores.db.close()
+  except CatchableError:
+    discard
+  try:
+    cfg.stores.versionsDB.checkpoint()
+    cfg.stores.versionsDB.close()
+  except CatchableError:
+    discard
 
 proc isDevelopAvailable*(cfg: DatpkgrConfig, pkgName: string): bool =
   ## True if pkgName is available as develop (symlink). Driver-only to avoid circular import with install.

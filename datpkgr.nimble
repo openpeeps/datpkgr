@@ -11,7 +11,7 @@ srcDir        = "src"
 
 requires "nim >= 2.2.10"
 requires "semver >= 1.2.3"
-requires "boogie >= 0.1.2"
+requires "boogie >= 0.2.1"
 requires "openparser >= 0.2.0"
 requires "sweetsyntax >= 0.1.0"
 requires "malebolgia >= 1.3.0"
