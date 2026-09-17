@@ -70,6 +70,38 @@ proc makeSubmoduleFixture(): tuple[parent, base: string] =
   git(parent, "commit -qm addsub")
   (parent, base)
 
+suite "git — ssh host cache":
+  test "sshHostOf extracts the host from http(s) urls":
+    check sshHostOf("https://github.com/openpeeps/clue") == "github.com"
+    check sshHostOf("http://example.com/org/repo") == "example.com"
+    check sshHostOf("git+https://github.com/openpeeps/clue") == "github.com"
+
+  test "sshHostOf returns empty when no ssh attempt exists":
+    check sshHostOf("git@github.com:openpeeps/clue.git") == ""
+    check sshHostOf("ssh://git@github.com/org/repo") == ""
+    check sshHostOf("https://example.com") == ""
+    check sshHostOf("/local/path/repo") == ""
+
+  test "known-bad hosts are remembered per process":
+    check not sshKnownBad("sshnofail.invalid")
+    markSshBad("sshnofail.invalid")
+    check sshKnownBad("sshnofail.invalid")
+    check not sshKnownBad("other.invalid")
+
+  test "empty host is a no-op":
+    markSshBad("")
+    check not sshKnownBad("")
+
+  test "refresh with known-bad ssh host goes straight to plain url":
+    let (parent, base) = makeSubmoduleFixture()
+    defer: removeDir(base)
+    let cfg = newDatpkgrConfig("sshskiptest", base / "root-skip")
+    let dest = base / "clone-skip"
+    check cfg.cloneRepo(parent, dest, nonInteractive = true)
+    markSshBad("refreshskip.invalid")
+    check not cfg.refreshRemoteTags(dest,
+      "https://refreshskip.invalid/org/repo", nonInteractive = true)
+
 suite "git — submodules (opt-in via allowSubmodules)":
   test "disabled by default: submodule content absent":
     let (parent, base) = makeSubmoduleFixture()

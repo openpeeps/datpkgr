@@ -16,6 +16,78 @@ var failedClones* = initHashSet[string]()
 var failedClonesLock*: Lock
 failedClonesLock.initLock()
 
+var sshFailedHosts* = initHashSet[string]()
+var sshFailedHostsLock*: Lock
+sshFailedHostsLock.initLock()
+
+proc sshHostOf*(url: string): string =
+  ## Host part of an http(s) URL, or "" when the URL isn't ssh-convertible
+  ## (already ssh-style, or unparsable — no separate SSH attempt exists then).
+  var u = url.strip()
+  if u.startsWith("git+"):
+    u = u[4 .. ^1]
+  if not (u.startsWith("https://") or u.startsWith("http://")):
+    return ""
+  let rest = u.split("://")[1]
+  let slashPos = rest.find('/')
+  if slashPos < 0:
+    return ""
+  rest[0 ..< slashPos]
+
+proc sshKnownBad*(host: string): bool =
+  ## True when SSH to `host` already failed once in this process — later
+  ## clones then skip the doomed SSH attempt (up to `ConnectTimeout` stall).
+  if host.len == 0:
+    return false
+  {.cast(gcsafe).}:
+    withLock sshFailedHostsLock:
+      result = host in sshFailedHosts
+
+proc markSshBad*(host: string) =
+  if host.len == 0:
+    return
+  {.cast(gcsafe).}:
+    withLock sshFailedHostsLock:
+      sshFailedHosts.incl(host)
+
+var cloneLogLock: Lock
+cloneLogLock.initLock()
+var pendingCloneStartFn: proc(name, url: string) {.gcsafe.}
+  ## Single worker-level emit point for clone/fetch starts (option A): armed
+  ## by `armCloneStartFn` for the duration of an install/discovery scope, fired
+  ## from inside `cloneRepo`/`refreshRemoteTags` the moment real network work
+  ## begins. Call sites never print it themselves. Name is derived from the
+  ## destination cache dir basename (`<cache>/<name>`).
+
+proc armCloneStartFn*(fn: proc(name, url: string) {.gcsafe.}): bool =
+  ## Arms the single clone-start emit; returns true when this call armed it
+  ## (caller must `disarmCloneStartFn`). No-op when an outer scope already
+  ## armed it, so nested `installPackage` → batch calls share one arming.
+  {.cast(gcsafe).}:
+    withLock cloneLogLock:
+      if pendingCloneStartFn == nil:
+        pendingCloneStartFn = fn
+        return true
+  false
+
+proc disarmCloneStartFn*() =
+  {.cast(gcsafe).}:
+    withLock cloneLogLock:
+      pendingCloneStartFn = nil
+
+proc notifyCloneStart(url, dest: string) {.gcsafe.} =
+  # Snapshot under the arming lock, invoke under the shared emit lock —
+  # never hold both (arming paths never take emitLock: no inversion).
+  var fn: proc(name, url: string) {.gcsafe.}
+  {.cast(gcsafe).}:
+    withLock cloneLogLock:
+      fn = pendingCloneStartFn
+  if fn != nil:
+    {.cast(gcsafe).}:
+      withLock emitLock:
+        fn(dest.extractFilename, url)
+        try: flushFile(stdout) except: discard
+
 proc gitEnv*(nonInteractive = false): StringTableRef =
   result = newStringTable()
   for k, v in envPairs():
@@ -108,13 +180,19 @@ proc updateSubmodulesRaw*(dest: string, allowSubmodules = false): bool {.gcsafe.
   code == 0
 
 proc cloneRepo*(cfg: DatpkgrConfig, url, dest: string, nonInteractive = false): bool {.gcsafe.} =
+  notifyCloneStart(url, dest)
   let env = gitEnv(nonInteractive)
   let subFlag = if cfg.allowSubmodules: " --recurse-submodules" else: ""
-  let (o1, c1) = cfg.gitExec("git -c protocol.file.allow=always clone" & subFlag & " " & toGitSshUrl(url) & " " & quoteShell(dest), env = env)
-  if c1 == 0:
-    discard cfg.gitExec("git -C " & quoteShell(dest) & " fetch --tags --quiet", env = env)
-    discard cfg.updateSubmodules(dest)
-    return true
+  let sshUrl = toGitSshUrl(url)
+  if sshUrl != url and not sshKnownBad(sshHostOf(url)):
+    let (o1, c1) = cfg.gitExec("git -c protocol.file.allow=always clone" & subFlag & " " & sshUrl & " " & quoteShell(dest), env = env)
+    if c1 == 0:
+      discard cfg.gitExec("git -C " & quoteShell(dest) & " fetch --tags --quiet", env = env)
+      discard cfg.updateSubmodules(dest)
+      return true
+    # SSH failed (blocked network or auth) — remember the host so later
+    # clones skip the doomed SSH attempt and go straight to the plain URL.
+    markSshBad(sshHostOf(url))
   let (o2, c2) = cfg.gitExec("git -c protocol.file.allow=always clone" & subFlag & " " & url & " " & quoteShell(dest), env = env)
   if c2 == 0:
     discard cfg.gitExec("git -C " & quoteShell(dest) & " fetch --tags --quiet", env = env)
@@ -123,16 +201,22 @@ proc cloneRepo*(cfg: DatpkgrConfig, url, dest: string, nonInteractive = false): 
   false
 
 proc refreshRemoteTags*(cfg: DatpkgrConfig, dest, url: string, nonInteractive = false): bool {.gcsafe.} =
-  discard cfg.gitExec("git -C " & quoteShell(dest) & " remote set-url origin " & toGitSshUrl(url))
+  notifyCloneStart(url, dest)
   let env = gitEnv(nonInteractive)
-  let (output, exitCode) = cfg.gitExec("git -C " & quoteShell(dest) &
-    " fetch --tags --prune --quiet", env = env)
-  if exitCode != 0:
-    discard cfg.gitExec("git -C " & quoteShell(dest) & " remote set-url origin " & url)
-    let (out2, code2) = cfg.gitExec("git -C " & quoteShell(dest) &
+  let sshUrl = toGitSshUrl(url)
+  if sshUrl != url and not sshKnownBad(sshHostOf(url)):
+    discard cfg.gitExec("git -C " & quoteShell(dest) & " remote set-url origin " & sshUrl)
+    let (output, exitCode) = cfg.gitExec("git -C " & quoteShell(dest) &
       " fetch --tags --prune --quiet", env = env)
-    if code2 != 0:
-      return false
+    if exitCode == 0:
+      discard cfg.updateSubmodules(dest)
+      return true
+    markSshBad(sshHostOf(url))
+  discard cfg.gitExec("git -C " & quoteShell(dest) & " remote set-url origin " & url)
+  let (out2, code2) = cfg.gitExec("git -C " & quoteShell(dest) &
+    " fetch --tags --prune --quiet", env = env)
+  if code2 != 0:
+    return false
   discard cfg.updateSubmodules(dest)
   true
 

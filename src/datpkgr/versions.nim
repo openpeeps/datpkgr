@@ -359,11 +359,41 @@ type
   TagFetchJob = tuple[name: string, url: string, dest: string, refresh: bool,
     allowSubmodules: bool]
 
+var batchLogLock: Lock
+batchLogLock.initLock()
+var pendingFetchStartFn: proc(name: string) {.gcsafe.}
+var pendingFetchEnabled = false
+
 proc fetchTagsJob(job: TagFetchJob): tuple[name: string, tags: seq[string]] {.gcsafe.} =
   ## Worker for `discoverVersionsBatch`: ensures the package is present in
   ## `_cache` — cloning on a miss, fetching new tags on an existing clone when
   ## `refresh` is set — then lists its local git tags. Non-interactive so dead
   ## URLs fail fast. Never touches the DB.
+  ## Immediate mode: the resolving start line fires from inside the worker for
+  ## the fast local path only. Clone starts are owned by the git layer
+  ## (`notifyCloneStart` — single emit point), so a cloning package prints
+  ## exactly one start line and never a resolving+cloning pair.
+  # Snapshot arming state under its lock; the actual emit goes through
+  # the shared emitLock (see config.emitLock) — a clone start from another
+  # worker must never enter the host display concurrently with this.
+  var fetchFn: proc(name: string) {.gcsafe.}
+  var fetchArmed = false
+  {.cast(gcsafe).}:
+    withLock batchLogLock:
+      fetchArmed = pendingFetchEnabled
+      fetchFn = pendingFetchStartFn
+  if fetchArmed and not job.refresh and fetchFn != nil:
+    var e = dirExists(job.dest)
+    if e:
+      try:
+        let chk = newDatpkgrConfig("datpkgr",
+          job.dest.parentDir().parentDir(), debugEnabled = false)
+        e = chk.driver.exists(relativePath(job.dest, chk.rootPath))
+      except: discard
+    if e:
+      {.cast(gcsafe).}:
+        withLock emitLock:
+          fetchFn(job.name)
   let dest = job.dest
   var existsDest = dirExists(dest)
   let tmpCfgCheck = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(), debugEnabled = false)
@@ -415,12 +445,27 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
         continue
     toFetch.add(pkg)
   if toFetch.len > 0:
+    # Immediate mode: arm worker-side resolving starts (gcsafe cfg callback
+    # only — never the caller's non-gcsafe `onDone` closure) plus the
+    # git-level clone-start emit for the batch. Done events stay on the
+    # caller thread below via `onDone`, so counts match the final deduped
+    # versions. Completion order is nondeterministic.
+    {.cast(gcsafe).}:
+      withLock batchLogLock:
+        pendingFetchStartFn = cfg.callbacks.onFetchStart
+        pendingFetchEnabled = true
+    let armedGit = armCloneStartFn(cfg.callbacks.onCloneStart)
     var results = newSeq[tuple[name: string, tags: seq[string]]](toFetch.len)
     var m = createMaster()
     m.awaitAll:
       for i, pkg in toFetch:
         m.spawn fetchTagsJob((pkg.name, pkg.url, cfg.pkgsCachePath() / pkg.name, refresh, cfg.allowSubmodules)) ->
           results[i]
+    if armedGit: disarmCloneStartFn()
+    {.cast(gcsafe).}:
+      withLock batchLogLock:
+        pendingFetchStartFn = nil
+        pendingFetchEnabled = false
     for i in 0 ..< toFetch.len:
       let (name, tags) = results[i]
       let versions = discoverFromTags(name, tags)
@@ -576,7 +621,7 @@ proc cacheDeps(cfg: DatpkgrConfig, name, version: string, deps: CachedDeps) =
       "deps": newJSONValue(depsNode),
       "cached_at": newTextValue(now().format("yyyy-MM-dd'T'HH:mm:sszzz"))
     }))
-    cfg.stores.db.checkpoint()
+    cfg.stores.versionsDB.checkpoint()
 
 proc defaultBranch(cfg: DatpkgrConfig, dest: string): string =
   ## The default branch name of a cached clone (origin/HEAD, fallback master).

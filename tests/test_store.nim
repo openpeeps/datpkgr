@@ -134,3 +134,48 @@ suite "store — withDatpkgrDB":
     check not cfg.stores.initialized
     cfg.withDatpkgrDB do:
       check cfg.stores.initialized
+
+  test "closes on scope exit and reopens with persisted data":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.withDatpkgrDB do:
+      check cfg.stores.initialized
+      check cfg.stores.dbDepth == 1
+      discard cfg.seedPackagesTable(%*[
+        {"name": "persisted", "url": "https://github.com/org/persisted",
+         "method": "git", "tags": [], "description": "d",
+         "license": "MIT", "web": "https://example.com"}], "t")
+    check not cfg.stores.initialized
+    check cfg.stores.dbDepth == 0
+    let m = cfg.fetchPkgMeta("persisted")
+    check m.isSome
+    check m.get().url == "https://github.com/org/persisted"
+    check not cfg.stores.initialized
+
+  test "nested scopes share one open":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.withDatpkgrDB do:
+      check cfg.stores.dbDepth == 1
+      cfg.withDatpkgrDB do:
+        check cfg.stores.dbDepth == 2
+        check cfg.stores.initialized
+      check cfg.stores.dbDepth == 1
+      check cfg.stores.initialized
+    check cfg.stores.dbDepth == 0
+    check not cfg.stores.initialized
+
+  test "exception inside scope still closes":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    try:
+      cfg.withDatpkgrDB do:
+        check cfg.stores.initialized
+        raise newException(ValueError, "boom")
+    except ValueError:
+      discard
+    check cfg.stores.dbDepth == 0
+    check not cfg.stores.initialized
+    # usable again after the failure
+    cfg.withDatpkgrDB do:
+      check cfg.stores.initialized

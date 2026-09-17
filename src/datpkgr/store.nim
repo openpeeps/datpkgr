@@ -90,9 +90,14 @@ proc saveSources*(cfg: DatpkgrConfig, sources: seq[Source]) =
   cfg.fs.write(cfg.sourcesPath(), pretty(%*{"sources": arr}))
 
 proc resetDatpkgrForTests*(cfg: DatpkgrConfig) =
+  cfg.stores.dbDepth = 0
   cfg.stores.initialized = false
+  cfg.stores.setupDone = false
 
 proc seedPackagesTable*(cfg: DatpkgrConfig, registryPackages: JsonNode, source: string): int =
+  ## Caller must hold a `withDatpkgrDB` scope (setup, refreshSource) or a
+  ## bare `initDatpkgr` open (tests) — kept unscoped because it is defined
+  ## before the template and all call sites already guarantee openness.
   for localPkg in registryPackages:
     if localPkg.hasKey("alias") or not localPkg.hasKey("web"):
       continue
@@ -134,18 +139,58 @@ proc manifestCanonicalName(cfg: DatpkgrConfig, manifestPath: string): string =
   if result == "manifest":
     result = ""
 
+proc initDatpkgr*(cfg: DatpkgrConfig)
+proc openDatpkgrStores*(cfg: DatpkgrConfig)
+proc setupDatpkgrStores*(cfg: DatpkgrConfig, hasDatabase: bool)
+proc closeDatpkgr*(cfg: DatpkgrConfig)
+
+template withDatpkgrDB*(cfg: DatpkgrConfig, body: untyped) =
+  ## Per-operation scope: opens the stores (acquiring the cross-process
+  ## locks) on the outermost entry, runs `body`, then checkpoints + closes
+  ## on the outermost exit — even when `body` raises. Re-entrant: nested
+  ## scopes share the open stores. Network/filesystem phases must stay
+  ## outside any scope so other processes can use the databases meanwhile.
+  ## All DB touches run on the caller's thread (the store isn't thread-safe).
+  cfg.initDatpkgr()
+  inc cfg.stores.dbDepth
+  try:
+    body
+  finally:
+    dec cfg.stores.dbDepth
+    if cfg.stores.dbDepth <= 0:
+      cfg.stores.dbDepth = 0
+      cfg.closeDatpkgr()
+
 proc initDatpkgr*(cfg: DatpkgrConfig) =
+  ## Ensures open stores + one-time setup. Cheap after the first scope per
+  ## config: later `withDatpkgrDB` scopes only reopen the stores (WAL replay)
+  ## while the lock is actually needed, releasing it on scope exit — so a
+  ## second process can use the databases between operations.
   if cfg.stores.initialized:
     return
-  cfg.stores.initialized = true
+  let hasDatabase = fileExists(cfg.dbPath())
+  cfg.openDatpkgrStores()
+  if cfg.stores.setupDone:
+    return
+  try:
+    cfg.setupDatpkgrStores(hasDatabase)
+  except:
+    cfg.closeDatpkgr()
+    raise
+  cfg.stores.setupDone = true
 
+proc openDatpkgrStores*(cfg: DatpkgrConfig) =
+  ## Opens both stores, acquiring the cross-process file locks.
+  ## `initialized` is set only after both opens succeed, so a failed open
+  ## retries cleanly on the next scope instead of wedging the config.
+  if cfg.stores.initialized:
+    return
   cfg.driver.makeDir("")
   cfg.driver.makeDir("packages")
   cfg.driver.makeDir("packages/_cache")
   cfg.driver.makeDir("bin")
   cfg.driver.makeDir("develop")
 
-  var hasDatabase = fileExists(cfg.dbPath())
   cfg.stores.db = newStore(cfg.dbPath(), StorageMode.smDisk,
                     enableWal = true, walFlushEveryOps = 100'u32,
                     enableConcurrency = true)
@@ -153,6 +198,12 @@ proc initDatpkgr*(cfg: DatpkgrConfig) =
                         enableWal = true, walFlushEveryOps = 100'u32,
                         enableConcurrency = true)
   ensureDatpkgrSignalHandlers()
+  cfg.stores.initialized = true
+
+proc setupDatpkgrStores*(cfg: DatpkgrConfig, hasDatabase: bool) =
+  ## One-time setup on open stores: tables, migrations, cache-dir fixups,
+  ## first-run registry seed (may download — holds the lock, but once only).
+  ## Later scopes skip this; they only reopen the stores.
 
   cfg.stores.db.createTableIfNotExist(newTable(
     name = "packages",
@@ -541,14 +592,16 @@ proc refreshSource*(cfg: DatpkgrConfig, sourceName: string): bool =
         createDir(cfg.legacyRegistryPath.parentDir())
         copyFile(cacheFull, cfg.legacyRegistryPath)
       except CatchableError: discard
-    cfg.initDatpkgr()
-    let tbl = cfg.stores.db.getTable("packages").get()
-    for (pk, row) in tbl.allRows():
-      if row["source"].strVal == src.name:
-        discard cfg.stores.db.deleteRow("packages", pk)
-    let count = cfg.seedPackagesTable(registryPackages, src.name)
-    cfg.stores.db.checkpoint()
-    cfg.logInfo("Updated " & src.name & " (" & $count & " packages)")
+    # Network (curl above) stays outside the DB scope: the lock is held
+    # only for the delete/reseed write below.
+    cfg.withDatpkgrDB do:
+      let tbl = cfg.stores.db.getTable("packages").get()
+      for (pk, row) in tbl.allRows():
+        if row["source"].strVal == src.name:
+          discard cfg.stores.db.deleteRow("packages", pk)
+      let count = cfg.seedPackagesTable(registryPackages, src.name)
+      cfg.stores.db.checkpoint()
+      cfg.logInfo("Updated " & src.name & " (" & $count & " packages)")
     return true
   except CatchableError as e:
     cfg.logError("Failed to update source " & sourceName & ": " & e.msg)
@@ -567,10 +620,6 @@ proc refreshAllSources*(cfg: DatpkgrConfig): bool =
 proc refreshRegistry*(cfg: DatpkgrConfig): bool =
   cfg.refreshAllSources()
 
-template withDatpkgrDB*(cfg: DatpkgrConfig, body: untyped) =
-  cfg.initDatpkgr()
-  body
-
 proc closeDatpkgr*(cfg: DatpkgrConfig) =
   ## Graceful shutdown for long-lived hosts: flushes then closes both
   ## stores (joins the concurrent write worker, unregisters the crashsafe
@@ -579,6 +628,7 @@ proc closeDatpkgr*(cfg: DatpkgrConfig) =
   ## paths stay flush-only (boogie owns them); call this on clean shutdown.
   if cfg == nil or not cfg.stores.initialized:
     return
+  cfg.stores.dbDepth = 0
   cfg.stores.initialized = false
   try:
     cfg.stores.db.checkpoint()

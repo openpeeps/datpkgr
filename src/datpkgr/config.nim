@@ -4,10 +4,19 @@
 #          Made by Humans from OpenPeeps
 #          https://github.com/openpeeps/datpkgr
 
-import std/[os, strutils, tables, json]
+import std/[os, strutils, tables, json, locks]
 import pkg/flysystem
 import pkg/boogie/stores/rdbms
 import ./types
+
+var emitLock*: Lock
+emitLock.initLock()
+## Single lock serializing ALL worker-thread immediate-mode callback
+## invocations (clone/fetch/install starts). The per-kind locks guard
+## arming state only; without this, a clone start and a fetch start from
+## two workers would enter a non-thread-safe host display concurrently
+## and corrupt the heap. Host `log` calls from the main thread are the
+## host's own responsibility (clue serializes them via displayLock).
 
 type
   LogLevel* = enum
@@ -20,6 +29,16 @@ type
   Callbacks* = object
     log*: proc(level: LogLevel, msg: string) {.gcsafe.}
     onFetch*: proc(name: string, versions: int, cached: bool) {.gcsafe.}
+    onCloneStart*: proc(name, url: string) {.gcsafe.}
+      ## Fired the moment a package clone/fetch starts (inside the
+      ## parallel worker, before any network). Used for immediate mode
+      ## output so a run never looks hung. Optional; nil = silent.
+    onFetchStart*: proc(name: string) {.gcsafe.}
+      ## Fired when version discovery for `name` starts (cache miss path).
+      ## Optional; nil = silent.
+    onInstallStart*: proc(label: string) {.gcsafe.}
+      ## Fired when installation of one resolved package starts
+      ## (`label` is e.g. `name@1.2.3`). Optional; nil = silent.
     onSubmodules*: proc(name, dest: string) {.gcsafe.}
       ## Fired once a package is installed whose checkout carries git
       ## submodules (`name` is the package, `dest` its cache checkout).
@@ -29,6 +48,11 @@ type
     db*: Store
     versionsDB*: Store
     initialized*: bool
+      ## True while the stores are open (cross-process lock held).
+    setupDone*: bool
+      ## One-time dirs/tables/migrations/seed ran for this config.
+    dbDepth*: int
+      ## Re-entrant `withDatpkgrDB` scope depth; 0 = closed, lock released.
 
   DatpkgrConfig* = ref object
     appName*: string

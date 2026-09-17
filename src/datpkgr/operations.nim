@@ -23,8 +23,7 @@ import ./resolver
 
 var installLogLock: Lock
 installLogLock.initLock()
-var pendingLogFn: proc(level: LogLevel, msg: string) {.gcsafe.}
-var pendingSubmodulesFn: proc(name, dest: string) {.gcsafe.}
+var pendingInstallStartFn: proc(label: string) {.gcsafe.}
 
 # ----------------------------------------------------------------------
 # helpers (from manager.nim)
@@ -173,18 +172,20 @@ proc installResolvedPkg(job: InstallJob): bool {.gcsafe.} =
     return false
 
 proc loggedInstall(job: InstallJob, lbl: string): bool {.gcsafe.} =
-  let ok = installResolvedPkg(job)
-  if ok:
+  # Immediate mode: announce the start before the (slow) checkout+copy so the
+  # CLI never looks hung. Finish lines are printed in bulk by the caller after
+  # `awaitAll` under a `Resolved packages:` header (deterministic order).
+  # Snapshot under the arming lock, invoke under the shared emitLock.
+  var fn: proc(label: string) {.gcsafe.}
+  {.cast(gcsafe).}:
+    withLock installLogLock:
+      fn = pendingInstallStartFn
+  if fn != nil:
     {.cast(gcsafe).}:
-      if pendingLogFn != nil:
-        withLock installLogLock:
-          pendingLogFn(lvlInfo, "  " & lbl)
-          if job.allowSubmodules and destHasSubmodules(job.cacheDir):
-            if pendingSubmodulesFn != nil:
-              pendingSubmodulesFn(job.name, job.cacheDir)
-            else:
-              pendingLogFn(lvlInfo, "    Installing with submodules")
-  ok
+      withLock emitLock:
+        fn(lbl)
+        try: flushFile(stdout) except: discard
+  installResolvedPkg(job)
 
 proc manifestCanonicalName(cfg: DatpkgrConfig, manifestPath: string): string =
   try:
@@ -264,8 +265,18 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
   let isOuter = installDepth == 0
   inc installDepth
   defer: dec installDepth
+  # Single worker-level clone-start emit (option A): armed once per outer
+  # call; nested calls (update → install, install → batch) share it.
+  let armedGit = armCloneStartFn(cfg.callbacks.onCloneStart)
+  defer:
+    if armedGit: disarmCloneStartFn()
 
-  cfg.withDatpkgrDB do:
+  # NOTE: deliberately NOT wrapped in `withDatpkgrDB`. DB access happens in
+  # short per-operation scopes (fetch/cache/record helpers self-scope), so
+  # the cross-process lock is released during clones, discovery waves and
+  # file copies — a second process can use the databases meanwhile. Wrapping
+  # the whole install would hold the lock for the entire run (old behavior).
+  block:
     let showProgress = verbose # isatty check left to caller via verbose / callbacks
     proc progress(msg: string) =
       if showProgress: cfg.logInfo(msg)
@@ -273,6 +284,13 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       cfg.logWarn(msg)
     proc fail(msg: string) =
       cfg.logError(msg)
+
+    var headerEmitted = false
+    proc ensureHeader() =
+      if not headerEmitted and not suppressSummary and isOuter:
+        cfg.logInfo("Installing packages...")
+        try: flushFile(stdout) except: discard
+        headerEmitted = true
 
     var rootMeta: PkgRef
     var curName = pkgName
@@ -286,6 +304,11 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         return false
       rootMeta = rootMetaOpt.get()
 
+    # Header goes here: the package is known to exist (unknown names already
+    # returned above), and no clone/progress line has printed yet — so it
+    # always leads the output instead of landing mid-stream.
+    ensureHeader()
+
     let isDevelopRoot = rootMeta.url.len == 0 and cfg.isDevelopAvailable(curName)
     var rootDest = cfg.pkgsCachePath() / curName
     if isDevelopRoot:
@@ -297,11 +320,12 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       except: rootExists = dirExists(rootDest)
       if not rootExists:
         progress("fetching " & curName & "...")
+        # Clone-start line fires inside the git layer (single emit point).
         if not cfg.clonePackage(rootMeta.url, rootDest):
           fail("Failed to fetch " & curName)
           return false
       else:
-        progress("using cached " & curName)
+        progress("Using cached " & curName)
         if refresh:
           discard cfg.clonePackage(rootMeta.url, rootDest, refresh = true)
 
@@ -636,11 +660,6 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     var installedCount = 0
     var installedLabels: seq[string]
     var jobs: seq[InstallJob]
-    var headerEmitted = false
-    proc ensureHeader() =
-      if not headerEmitted and not suppressSummary and isOuter:
-        cfg.logSuccess("Installing packages...")
-        headerEmitted = true
     for rp in resolution.packages:
       if depsOnly and rp.name == curName:
         # --depsOnly: the requested package itself is never installed (no
@@ -653,10 +672,9 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         let lbl = formatLabel(rp.name, verStr)
         installedCount.inc
         installedLabels.add(lbl)
-        if not suppressSummary and isOuter:
-          ensureHeader()
-          withLock installLogLock:
-            cfg.callbacks.log(lvlInfo, "  " & lbl)
+        # Finish lines print in bulk after `awaitAll` under `Resolved
+        # packages:` — only the header is ensured here.
+        ensureHeader()
         continue
       cfg.logDebug("install: " & rp.name & "@" & verStr)
       let cacheDir = cfg.pkgsCachePath() / rp.name
@@ -672,6 +690,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         if url.len == 0:
           warn("No URL for " & rp.name & ", skipping")
           continue
+        # Clone-start line fires inside the git layer (single emit point).
         if not cfg.clonePackage(url, cacheDir):
           continue
       let verDir = cfg.pkgsPath() / rp.name / verStr
@@ -685,11 +704,8 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         let lbl = formatLabel(rp.name, verStr)
         installedCount.inc
         installedLabels.add(lbl)
-        if not suppressSummary and isOuter:
-          ensureHeader()
-          withLock installLogLock:
-            cfg.callbacks.log(lvlInfo, "  " & lbl)
-          cfg.notifySubmodules(rp.name, cacheDir)
+        ensureHeader()
+        cfg.notifySubmodules(rp.name, cacheDir)
         continue
       # build Manifest for installCleanCopy via cfg
       let manifestPath = cfg.findManifestInDir(cacheDir)
@@ -744,19 +760,19 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       var jobLabels = newSeq[string](jobs.len)
       for i, j in jobs:
         jobLabels[i] = formatLabel(j.name, j.verStr)
-      pendingLogFn = cfg.callbacks.log
-      pendingSubmodulesFn = cfg.callbacks.onSubmodules
+      pendingInstallStartFn = cfg.callbacks.onInstallStart
       var m = createMaster()
       m.awaitAll:
         for i, job in jobs:
           let lbl = jobLabels[i]
           m.spawn loggedInstall(job, lbl) -> results[i]
-      pendingLogFn = nil
-      pendingSubmodulesFn = nil
+      pendingInstallStartFn = nil
       for i, ok in results:
         if ok:
           installedCount.inc
           installedLabels.add(jobLabels[i])
+          if jobs[i].allowSubmodules and destHasSubmodules(jobs[i].cacheDir):
+            cfg.notifySubmodules(jobs[i].name, jobs[i].cacheDir)
         else:
           warn("Failed to install " & jobs[i].name & " v" & jobs[i].verStr)
 
@@ -808,6 +824,10 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     installedCount = installedLabels.len
     if not suppressSummary and isOuter:
       if installedCount > 0:
+        cfg.logInfo("Resolved packages:")
+        for lbl in installedLabels:
+          cfg.callbacks.log(lvlInfo, "  " & lbl)
+        try: flushFile(stdout) except: discard
         cfg.logSuccess("Installed " & $installedCount & " " & pluralize(installedCount, "package"))
       elif depsOnly:
         cfg.logInfo(curName & " has no dependencies to install")
@@ -919,11 +939,12 @@ proc installedHasPackage*(cfg: DatpkgrConfig, pkgName: string): bool =
   if not hasInstalled:
     hasInstalled = cfg.resolveInstalledPath(pkgName, "").len > 0
   if hasInstalled: return true
-  let tblOpt = cfg.stores.db.getTable("packages")
-  if tblOpt.isSome:
-    let tbl = tblOpt.get()
-    if tbl.where("name", newTextValue(pkgName)).toSeq().len > 0:
-      return true
+  cfg.withDatpkgrDB do:
+    let tblOpt = cfg.stores.db.getTable("packages")
+    if tblOpt.isSome:
+      let tbl = tblOpt.get()
+      if tbl.where("name", newTextValue(pkgName)).toSeq().len > 0:
+        return true
   false
 
 proc uninstallPackage*(cfg: DatpkgrConfig, pkgName: string, pkgVersion: string = "",
