@@ -4,19 +4,10 @@
 #          Made by Humans from OpenPeeps
 #          https://github.com/openpeeps/datpkgr
 
-import std/[os, strutils, tables, json, locks]
+import std/[os, strutils, tables, json]
 import pkg/flysystem
 import pkg/boogie/stores/rdbms
 import ./types
-
-var emitLock*: Lock
-emitLock.initLock()
-## Single lock serializing ALL worker-thread immediate-mode callback
-## invocations (clone/fetch/install starts). The per-kind locks guard
-## arming state only; without this, a clone start and a fetch start from
-## two workers would enter a non-thread-safe host display concurrently
-## and corrupt the heap. Host `log` calls from the main thread are the
-## host's own responsibility (clue serializes them via displayLock).
 
 type
   LogLevel* = enum

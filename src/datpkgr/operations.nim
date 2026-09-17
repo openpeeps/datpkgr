@@ -3,27 +3,24 @@
 # (c) 2026 George Lemon | MIT License
 # App-agnostic package operations. No kapsis dependency.
 # Language specifics via cfg.manifestParser / manifestFinder / manifestFileName
-# and Manifest.extra. Parallelism via malebolgia.
+# and Manifest.extra. Install-time parallelism via ./pool (pkg/threading/channels).
 
 import std/[sequtils, options, tables, sets, strformat, strutils,
-          times, os, osproc, terminal, strtabs, locks]
+          times, os, osproc, terminal, strtabs]
 
 import pkg/semver
 import pkg/openparser/json
-import pkg/malebolgia
 import pkg/flysystem
+import pkg/threading/channels
 
 import ./types
 import ./config
+import ./pool
 import ./store
 import ./git
 import ./versions
 import ./install
 import ./resolver
-
-var installLogLock: Lock
-installLogLock.initLock()
-var pendingInstallStartFn: proc(label: string) {.gcsafe.}
 
 # ----------------------------------------------------------------------
 # helpers (from manager.nim)
@@ -161,31 +158,24 @@ proc installResolvedPkg(job: InstallJob): bool {.gcsafe.} =
       discard checkoutHeadRaw(job.cacheDir, job.refresh, job.allowSubmodules)
   try:
     let m = manifestForJob(job)
-    # Use flysystem when possible via tmpCfg derived from verDir root
-    try:
-      let tmpCfg = newDatpkgrConfig("datpkgr", job.verDir.parentDir().parentDir().parentDir(), debugEnabled = false)
-      installCleanCopy(tmpCfg, job.cacheDir, job.verDir, m)
-    except:
-      installCleanCopy(job.cacheDir, job.verDir, m)
+    installCleanCopy(job.cacheDir, job.verDir, m)
     return true
   except CatchableError:
     return false
 
-proc loggedInstall(job: InstallJob, lbl: string): bool {.gcsafe.} =
-  # Immediate mode: announce the start before the (slow) checkout+copy so the
-  # CLI never looks hung. Finish lines are printed in bulk by the caller after
-  # `awaitAll` under a `Resolved packages:` header (deterministic order).
-  # Snapshot under the arming lock, invoke under the shared emitLock.
-  var fn: proc(label: string) {.gcsafe.}
-  {.cast(gcsafe).}:
-    withLock installLogLock:
-      fn = pendingInstallStartFn
-  if fn != nil:
-    {.cast(gcsafe).}:
-      withLock emitLock:
-        fn(lbl)
-        try: flushFile(stdout) except: discard
-  installResolvedPkg(job)
+proc installWorker*(job: InstallJob,
+    progress: Chan[ProgressEvent]): bool {.gcsafe.} =
+  ## Pool worker: announces the start through the progress channel (replayed
+  ## on the caller's thread post-join), then checks out and copies.
+  ## Finish lines are printed in bulk by the caller under a `Resolved
+  ## packages:` header (deterministic order). Worker-safe: plain values in,
+  ## raw filesystem/git only — no `cfg`, no DB, no callbacks.
+  try:
+    discard progress.trySend(ProgressEvent(kind: pkInstallStart,
+      name: job.name, label: job.verStr))
+    installResolvedPkg(job)
+  except:
+    false
 
 proc manifestCanonicalName(cfg: DatpkgrConfig, manifestPath: string): string =
   try:
@@ -265,11 +255,6 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
   let isOuter = installDepth == 0
   inc installDepth
   defer: dec installDepth
-  # Single worker-level clone-start emit (option A): armed once per outer
-  # call; nested calls (update → install, install → batch) share it.
-  let armedGit = armCloneStartFn(cfg.callbacks.onCloneStart)
-  defer:
-    if armedGit: disarmCloneStartFn()
 
   # NOTE: deliberately NOT wrapped in `withDatpkgrDB`. DB access happens in
   # short per-operation scopes (fetch/cache/record helpers self-scope), so
@@ -672,7 +657,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         let lbl = formatLabel(rp.name, verStr)
         installedCount.inc
         installedLabels.add(lbl)
-        # Finish lines print in bulk after `awaitAll` under `Resolved
+        # Finish lines print in bulk after the join under `Resolved
         # packages:` — only the header is ensured here.
         ensureHeader()
         continue
@@ -756,17 +741,17 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         skipFiles: getStrSeq(ex, "skipFiles")))
     if jobs.len > 0:
       ensureHeader()
-      var results = newSeq[bool](jobs.len)
       var jobLabels = newSeq[string](jobs.len)
       for i, j in jobs:
         jobLabels[i] = formatLabel(j.name, j.verStr)
-      pendingInstallStartFn = cfg.callbacks.onInstallStart
-      var m = createMaster()
-      m.awaitAll:
-        for i, job in jobs:
-          let lbl = jobLabels[i]
-          m.spawn loggedInstall(job, lbl) -> results[i]
-      pendingInstallStartFn = nil
+      # Finish lines print in bulk after the join under `Resolved
+      # packages:` — start events are replayed here post-join.
+      let (results, progSeq) = runPool(jobs, installWorker)
+      if cfg.callbacks.onInstallStart != nil:
+        for ev in progSeq:
+          if ev.kind == pkInstallStart:
+            cfg.callbacks.onInstallStart(formatLabel(ev.name, ev.label))
+            try: flushFile(stdout) except: discard
       for i, ok in results:
         if ok:
           installedCount.inc
@@ -852,6 +837,15 @@ proc updateRootSubprocess(exe, name: string): int {.gcsafe.} =
   result = p.waitForExit()
   p.close()
 
+proc updateRootWorker*(job: tuple[exe, name: string],
+    progress: Chan[ProgressEvent]): int {.gcsafe.} =
+  ## Pool worker: one subprocess per root. The child inherits the parent
+  ## streams, so its output is visible directly; no progress events needed.
+  try:
+    updateRootSubprocess(job.exe, job.name)
+  except:
+    1
+
 proc updatePackage*(cfg: DatpkgrConfig, name: string, verbose = false): bool =
   let recs = cfg.installedRecords(name)
   if recs.len > 0 and recs.all(proc(r: InstalledRecord): bool = cfg.isDevInstall(r)):
@@ -868,11 +862,10 @@ proc updateAllPackages*(cfg: DatpkgrConfig, verbose = false, exePath = ""): bool
     return cfg.updatePackage(roots[0], verbose)
   else:
     let exe = if exePath.len > 0: exePath else: getAppFilename()
-    var codes = newSeq[int](roots.len)
-    var m = createMaster()
-    m.awaitAll:
-      for i, name in roots:
-        m.spawn updateRootSubprocess(exe, name) -> codes[i]
+    var jobs: seq[tuple[exe, name: string]]
+    for name in roots:
+      jobs.add((exe, name))
+    let (codes, _) = runPool(jobs, updateRootWorker)
     if codes.anyIt(it != 0):
       return false
     return true

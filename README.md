@@ -41,7 +41,7 @@ nimble install datpkgr
 clue develop
 ```
 
-Requires `nim >= 2.2.10`, `semver`, `boogie`, `openparser`, `sweetsyntax`, `malebolgia`, `threading`, `flysystem`.
+Requires `nim >= 2.2.10`, `semver`, `boogie`, `openparser`, `sweetsyntax`, `threading`, `flysystem`.
 
 ## Quick Start
 

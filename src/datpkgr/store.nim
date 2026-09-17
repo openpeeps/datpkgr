@@ -632,11 +632,17 @@ proc closeDatpkgr*(cfg: DatpkgrConfig) =
   cfg.stores.initialized = false
   try:
     cfg.stores.db.checkpoint()
+  except CatchableError:
+    discard
+  try:
     cfg.stores.db.close()
   except CatchableError:
     discard
   try:
     cfg.stores.versionsDB.checkpoint()
+  except CatchableError:
+    discard
+  try:
     cfg.stores.versionsDB.close()
   except CatchableError:
     discard

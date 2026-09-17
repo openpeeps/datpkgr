@@ -5,18 +5,19 @@
 #          https://github.com/openpeeps/datpkgr
 
 import std/[os, osproc, strutils, tables, sets, sequtils,
-      algorithm, times, json, options, locks, monotimes, strtabs]
+      algorithm, times, json, options, monotimes, strtabs]
 
 import pkg/semver
-import pkg/malebolgia
 import pkg/flysystem
-import pkg/threading/semaphore
+import pkg/threading/channels
 
 import ./config
+import ./pool
 import ./store
 import ./resolver
 import ./types
 import ./git
+import ./install
 
 type
   DiscoveredVersion* = object
@@ -356,76 +357,86 @@ proc discoverVersions*(cfg: DatpkgrConfig, name, url: string, refresh = false,
   cfg.cacheVersions(name, result)
 
 type
-  TagFetchJob = tuple[name: string, url: string, dest: string, refresh: bool,
+  TagFetchJob* = tuple[name: string, url: string, dest: string, refresh: bool,
     allowSubmodules: bool]
+  TagFetchRes* = tuple[name: string, tags: seq[string]]
 
-var batchLogLock: Lock
-batchLogLock.initLock()
-var pendingFetchStartFn: proc(name: string) {.gcsafe.}
-var pendingFetchEnabled = false
-
-proc fetchTagsJob(job: TagFetchJob): tuple[name: string, tags: seq[string]] {.gcsafe.} =
-  ## Worker for `discoverVersionsBatch`: ensures the package is present in
-  ## `_cache` — cloning on a miss, fetching new tags on an existing clone when
-  ## `refresh` is set — then lists its local git tags. Non-interactive so dead
-  ## URLs fail fast. Never touches the DB.
-  ## Immediate mode: the resolving start line fires from inside the worker for
-  ## the fast local path only. Clone starts are owned by the git layer
-  ## (`notifyCloneStart` — single emit point), so a cloning package prints
-  ## exactly one start line and never a resolving+cloning pair.
-  # Snapshot arming state under its lock; the actual emit goes through
-  # the shared emitLock (see config.emitLock) — a clone start from another
-  # worker must never enter the host display concurrently with this.
-  var fetchFn: proc(name: string) {.gcsafe.}
-  var fetchArmed = false
-  {.cast(gcsafe).}:
-    withLock batchLogLock:
-      fetchArmed = pendingFetchEnabled
-      fetchFn = pendingFetchStartFn
-  if fetchArmed and not job.refresh and fetchFn != nil:
-    var e = dirExists(job.dest)
-    if e:
-      try:
-        let chk = newDatpkgrConfig("datpkgr",
-          job.dest.parentDir().parentDir(), debugEnabled = false)
-        e = chk.driver.exists(relativePath(job.dest, chk.rootPath))
-      except: discard
-    if e:
-      {.cast(gcsafe).}:
-        withLock emitLock:
-          fetchFn(job.name)
-  let dest = job.dest
-  var existsDest = dirExists(dest)
-  let tmpCfgCheck = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(), debugEnabled = false)
-  try: existsDest = tmpCfgCheck.driver.exists(relativePath(dest, tmpCfgCheck.rootPath))
-  except: discard
-  if not existsDest:
-    let tmpCfg = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(),
-      debugEnabled = false, allowSubmodules = job.allowSubmodules)
-    if tmpCfg.cloneRepo(job.url, dest, nonInteractive = true):
-      discard
+proc fetchTagsJob*(job: TagFetchJob,
+    progress: Chan[ProgressEvent]): TagFetchRes {.gcsafe.} =
+  ## Pool worker for `discoverVersionsBatch`: ensures the package is present
+  ## in `_cache` — cloning on a miss, fetching new tags on an existing clone
+  ## when `refresh` is set — then lists its local git tags. Non-interactive
+  ## so dead URLs fail fast. Worker-safe: plain values in, no `cfg`, no DB,
+  ## no callbacks — progress crosses via the channel, DB writes happen on
+  ## the caller's thread after the join.
+  ## Emits exactly one start event: `pkFetchStart` for the fast local path,
+  ## `pkCloneStart` whenever network work (clone/fetch) may run.
+  try:
+    if not job.refresh and dirExists(job.dest):
+      discard progress.trySend(ProgressEvent(kind: pkFetchStart,
+        name: job.name))
     else:
-      return (job.name, @[])
-  elif job.refresh:
-    let tmpCfg = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(),
-      debugEnabled = false, allowSubmodules = job.allowSubmodules)
-    discard tmpCfg.refreshRemoteTags(dest, job.url, nonInteractive = true)
-  let tmpCfg2 = newDatpkgrConfig("datpkgr", dest.parentDir().parentDir(), debugEnabled = false)
-  let tags =
-    try: findLocalTags(tmpCfg2, dest)
-    except: findLocalTags(dest)
-  (job.name, tags)
+      discard progress.trySend(ProgressEvent(kind: pkCloneStart,
+        name: job.name, url: job.url))
+    if not dirExists(job.dest):
+      if not cloneRepoRaw(job.url, job.dest, nonInteractive = true,
+          allowSubmodules = job.allowSubmodules):
+        return (job.name, @[])
+    elif job.refresh:
+      discard refreshRemoteTagsRaw(job.dest, job.url, nonInteractive = true,
+        allowSubmodules = job.allowSubmodules)
+    let tags =
+      try: findLocalTags(job.dest)
+      except: @[]
+    (job.name, tags)
+  except:
+    (job.name, @[])
+
+proc installedVersionsForReuse*(cfg: DatpkgrConfig, name: string): seq[DiscoveredVersion] =
+  ## Installed-on-disk versions for `name`, newest first: records from the
+  ## installed manifest whose version parses AND whose install dir
+  ## (`pkgsPath()/name/version`) exists. A db entry for an existing dir means
+  ## cached — the bits are reused as-is, so discovery must not hit the
+  ## network for it. Records without a dir (e.g. develop-mode rows pointing
+  ## at a source tree) and non-semver rows (e.g. `HEAD`) are skipped so
+  ## resolution can never pin an uninstallable version.
+  for rec in cfg.installedRecords(name):
+    if rec.version.len == 0:
+      continue
+    let verDir = cfg.pkgsPath() / name / rec.version
+    var hasDir = false
+    try: hasDir = cfg.driver.exists(relativePath(verDir, cfg.rootPath))
+    except: hasDir = dirExists(verDir)
+    if not hasDir:
+      continue
+    try:
+      let ver = parseVersion(rec.version)
+      var tag = ""
+      let dest = cfg.pkgsCachePath() / name
+      var hasClone = false
+      try: hasClone = cfg.driver.exists(relativePath(dest, cfg.rootPath))
+      except: hasClone = dirExists(dest)
+      if hasClone:
+        tag = tagForVersion(cfg, dest, rec.version)
+      if tag.len == 0:
+        tag = rec.version
+      result.add(DiscoveredVersion(version: ver, tag: tag))
+    except CatchableError:
+      discard
+  result.sort(proc(a, b: DiscoveredVersion): int = cmp(b.version, a.version))
 
 proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh = false,
     onDone: proc(name: string, versions: int, cached: bool) = nil):
     Table[string, seq[DiscoveredVersion]] =
   ## Discover versions for many packages at once. The clone-and-list steps run
-  ## concurrently on the malebolgia pool; DB cache writes happen sequentially on
-  ## the caller's thread since the store isn't thread-safe. `onDone` is called
-  ## on the caller's thread as each package finishes (for live progress), with
-  ## `cached` true when it was served from the local DB (no network). With
-  ## `refresh` existing clones are fetched (`git fetch --tags`) so new remote
-  ## tags are picked up for every package.
+  ## on the install-time pool (`./pool`); DB cache writes happen sequentially
+  ## on the caller's thread since the store isn't thread-safe. `onDone` is
+  ## called on the caller's thread as each package finishes (for progress),
+  ## with `cached` true when it was served locally — installed on disk or
+  ## from the local DB (no network).
+  ## With `refresh` existing clones are fetched (`git fetch --tags`) so new
+  ## remote tags are picked up for every package. Progress events are replayed
+  ## post-join, in channel order (nondeterministic across packages).
   var toFetch: seq[PkgRef]
   for pkg in pkgs:
     if pkg.name.len == 0 or result.hasKey(pkg.name):
@@ -437,6 +448,12 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
         onDone(pkg.name, vers.len, true)
       continue
     if not refresh:
+      let inst = cfg.installedVersionsForReuse(pkg.name)
+      if inst.len > 0:
+        result[pkg.name] = inst
+        if onDone != nil:
+          onDone(pkg.name, inst.len, true)
+        continue
       let cached = cfg.cachedVersions(pkg.name)
       if cached.len > 0:
         result[pkg.name] = cached
@@ -445,35 +462,35 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
         continue
     toFetch.add(pkg)
   if toFetch.len > 0:
-    # Immediate mode: arm worker-side resolving starts (gcsafe cfg callback
-    # only — never the caller's non-gcsafe `onDone` closure) plus the
-    # git-level clone-start emit for the batch. Done events stay on the
-    # caller thread below via `onDone`, so counts match the final deduped
-    # versions. Completion order is nondeterministic.
-    {.cast(gcsafe).}:
-      withLock batchLogLock:
-        pendingFetchStartFn = cfg.callbacks.onFetchStart
-        pendingFetchEnabled = true
-    let armedGit = armCloneStartFn(cfg.callbacks.onCloneStart)
-    var results = newSeq[tuple[name: string, tags: seq[string]]](toFetch.len)
-    var m = createMaster()
-    m.awaitAll:
-      for i, pkg in toFetch:
-        m.spawn fetchTagsJob((pkg.name, pkg.url, cfg.pkgsCachePath() / pkg.name, refresh, cfg.allowSubmodules)) ->
-          results[i]
-    if armedGit: disarmCloneStartFn()
-    {.cast(gcsafe).}:
-      withLock batchLogLock:
-        pendingFetchStartFn = nil
-        pendingFetchEnabled = false
-    for i in 0 ..< toFetch.len:
-      let (name, tags) = results[i]
-      let versions = discoverFromTags(name, tags)
-      cfg.debugLog("discover " & name & ": " & $versions.len & " version(s), " & $tags.len & " tag(s)")
-      cfg.cacheVersions(name, versions)
-      result[name] = versions
+    var jobs: seq[TagFetchJob]
+    var seenJobs = initHashSet[string]()
+    # Clones already on disk are served locally with no network (clone is
+    # skipped and no fetch runs unless `refresh`) — report those as cached
+    # so progress shows `(cached)` instead of `fetched ... using HEAD`.
+    # Tagless (HEAD) packages always land here because empty version lists
+    # are not representable in the DB/installed caches.
+    var preExisted = initHashSet[string]()
+    for pkg in toFetch:
+      if pkg.name in seenJobs:
+        continue
+      seenJobs.incl(pkg.name)
+      let dest = cfg.pkgsCachePath() / pkg.name
+      var hasDest = false
+      try: hasDest = cfg.driver.exists(relativePath(dest, cfg.rootPath))
+      except: hasDest = dirExists(dest)
+      if hasDest:
+        preExisted.incl(pkg.name)
+      jobs.add((pkg.name, pkg.url, dest, refresh,
+        cfg.allowSubmodules))
+    let (resSeq, progSeq) = runPool(jobs, fetchTagsJob)
+    cfg.replayProgress(progSeq)
+    for r in resSeq:
+      let versions = discoverFromTags(r.name, r.tags)
+      cfg.debugLog("discover " & r.name & ": " & $versions.len & " version(s), " & $r.tags.len & " tag(s)")
+      cfg.cacheVersions(r.name, versions)
+      result[r.name] = versions
       if onDone != nil:
-        onDone(name, versions.len, false)
+        onDone(r.name, versions.len, not refresh and r.name in preExisted)
 
 proc headVersion*(cfg: DatpkgrConfig, name: string): Version =
   ## Version to register for a package with no semver tags: the version

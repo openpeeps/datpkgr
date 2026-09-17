@@ -50,43 +50,13 @@ proc markSshBad*(host: string) =
     withLock sshFailedHostsLock:
       sshFailedHosts.incl(host)
 
-var cloneLogLock: Lock
-cloneLogLock.initLock()
-var pendingCloneStartFn: proc(name, url: string) {.gcsafe.}
-  ## Single worker-level emit point for clone/fetch starts (option A): armed
-  ## by `armCloneStartFn` for the duration of an install/discovery scope, fired
-  ## from inside `cloneRepo`/`refreshRemoteTags` the moment real network work
-  ## begins. Call sites never print it themselves. Name is derived from the
-  ## destination cache dir basename (`<cache>/<name>`).
-
-proc armCloneStartFn*(fn: proc(name, url: string) {.gcsafe.}): bool =
-  ## Arms the single clone-start emit; returns true when this call armed it
-  ## (caller must `disarmCloneStartFn`). No-op when an outer scope already
-  ## armed it, so nested `installPackage` → batch calls share one arming.
-  {.cast(gcsafe).}:
-    withLock cloneLogLock:
-      if pendingCloneStartFn == nil:
-        pendingCloneStartFn = fn
-        return true
-  false
-
-proc disarmCloneStartFn*() =
-  {.cast(gcsafe).}:
-    withLock cloneLogLock:
-      pendingCloneStartFn = nil
-
-proc notifyCloneStart(url, dest: string) {.gcsafe.} =
-  # Snapshot under the arming lock, invoke under the shared emit lock —
-  # never hold both (arming paths never take emitLock: no inversion).
-  var fn: proc(name, url: string) {.gcsafe.}
-  {.cast(gcsafe).}:
-    withLock cloneLogLock:
-      fn = pendingCloneStartFn
-  if fn != nil:
-    {.cast(gcsafe).}:
-      withLock emitLock:
-        fn(dest.extractFilename, url)
-        try: flushFile(stdout) except: discard
+proc emitCloneStart(cfg: DatpkgrConfig, url, dest: string) =
+  ## Main-thread only: the cfg-level git procs below never run on workers
+  ## (workers use the `*Raw` variants), so invoking the host callback here
+  ## is single-threaded by construction.
+  if cfg.callbacks.onCloneStart != nil:
+    cfg.callbacks.onCloneStart(dest.extractFilename, url)
+    try: flushFile(stdout) except: discard
 
 proc gitEnv*(nonInteractive = false): StringTableRef =
   result = newStringTable()
@@ -179,8 +149,8 @@ proc updateSubmodulesRaw*(dest: string, allowSubmodules = false): bool {.gcsafe.
     " -c protocol.file.allow=always submodule update --init --recursive --quiet")
   code == 0
 
-proc cloneRepo*(cfg: DatpkgrConfig, url, dest: string, nonInteractive = false): bool {.gcsafe.} =
-  notifyCloneStart(url, dest)
+proc cloneRepo*(cfg: DatpkgrConfig, url, dest: string, nonInteractive = false): bool =
+  cfg.emitCloneStart(url, dest)
   let env = gitEnv(nonInteractive)
   let subFlag = if cfg.allowSubmodules: " --recurse-submodules" else: ""
   let sshUrl = toGitSshUrl(url)
@@ -200,8 +170,8 @@ proc cloneRepo*(cfg: DatpkgrConfig, url, dest: string, nonInteractive = false): 
     return true
   false
 
-proc refreshRemoteTags*(cfg: DatpkgrConfig, dest, url: string, nonInteractive = false): bool {.gcsafe.} =
-  notifyCloneStart(url, dest)
+proc refreshRemoteTags*(cfg: DatpkgrConfig, dest, url: string, nonInteractive = false): bool =
+  cfg.emitCloneStart(url, dest)
   let env = gitEnv(nonInteractive)
   let sshUrl = toGitSshUrl(url)
   if sshUrl != url and not sshKnownBad(sshHostOf(url)):
@@ -218,6 +188,48 @@ proc refreshRemoteTags*(cfg: DatpkgrConfig, dest, url: string, nonInteractive = 
   if code2 != 0:
     return false
   discard cfg.updateSubmodules(dest)
+  true
+
+proc cloneRepoRaw*(url, dest: string, nonInteractive = false,
+    allowSubmodules = false): bool {.gcsafe.} =
+  ## Worker-safe clone: no `cfg`, no callbacks, no stores. Progress (if any)
+  ## is emitted by the calling worker through its progress channel.
+  let env = gitEnv(nonInteractive)
+  let subFlag = if allowSubmodules: " --recurse-submodules" else: ""
+  let sshUrl = toGitSshUrl(url)
+  if sshUrl != url and not sshKnownBad(sshHostOf(url)):
+    let (_, c1) = gitExecRaw("git -c protocol.file.allow=always clone" & subFlag & " " & sshUrl & " " & quoteShell(dest), env = env)
+    if c1 == 0:
+      discard gitExecRaw("git -C " & quoteShell(dest) & " fetch --tags --quiet", env = env)
+      discard updateSubmodulesRaw(dest, allowSubmodules)
+      return true
+    markSshBad(sshHostOf(url))
+  let (_, c2) = gitExecRaw("git -c protocol.file.allow=always clone" & subFlag & " " & url & " " & quoteShell(dest), env = env)
+  if c2 == 0:
+    discard gitExecRaw("git -C " & quoteShell(dest) & " fetch --tags --quiet", env = env)
+    discard updateSubmodulesRaw(dest, allowSubmodules)
+    return true
+  false
+
+proc refreshRemoteTagsRaw*(dest, url: string, nonInteractive = false,
+    allowSubmodules = false): bool {.gcsafe.} =
+  ## Worker-safe fetch: no `cfg`, no callbacks, no stores.
+  let env = gitEnv(nonInteractive)
+  let sshUrl = toGitSshUrl(url)
+  if sshUrl != url and not sshKnownBad(sshHostOf(url)):
+    discard gitExecRaw("git -C " & quoteShell(dest) & " remote set-url origin " & sshUrl)
+    let (_, exitCode) = gitExecRaw("git -C " & quoteShell(dest) &
+      " fetch --tags --prune --quiet", env = env)
+    if exitCode == 0:
+      discard updateSubmodulesRaw(dest, allowSubmodules)
+      return true
+    markSshBad(sshHostOf(url))
+  discard gitExecRaw("git -C " & quoteShell(dest) & " remote set-url origin " & url)
+  let (_, code2) = gitExecRaw("git -C " & quoteShell(dest) &
+    " fetch --tags --prune --quiet", env = env)
+  if code2 != 0:
+    return false
+  discard updateSubmodulesRaw(dest, allowSubmodules)
   true
 
 proc clonePackage*(cfg: DatpkgrConfig, url, dest: string, refresh = false, nonInteractive = false): bool =

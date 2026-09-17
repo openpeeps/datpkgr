@@ -210,6 +210,103 @@ proc collectInstalledDepNames*(cfg: DatpkgrConfig, rootNames: seq[string]): seq[
           queue.add(d)
   toSeq(visited)
 
+proc isInstalledOnDisk*(cfg: DatpkgrConfig, name: string): bool =
+  ## Any installed-manifest row for `name` whose install dir exists on disk.
+  ## Matches semver rows, `HEAD`/ref rows and develop rows alike — a db entry
+  ## for an existing dir means the bits are reusable as-is.
+  for rec in cfg.installedRecords(name):
+    if rec.version.len == 0:
+      continue
+    let verDir = cfg.pkgsPath() / name / rec.version
+    var onDisk = false
+    try: onDisk = cfg.driver.exists(relativePath(verDir, cfg.rootPath))
+    except: onDisk = dirExists(verDir)
+    if onDisk or (rec.path.len > 0 and dirExists(rec.path)):
+      return true
+  false
+
+proc installedVersionForReuse*(cfg: DatpkgrConfig, name, refStr: string): string =
+  ## Installed version of `name` reusable as-is (record exists and the install
+  ## dir is on disk), else "". A non-empty `refStr` (exact version, tag or
+  ## branch) must match the record exactly; an empty `refStr` returns the
+  ## newest installed semver version. Rolling `HEAD`/ref-only rows never
+  ## satisfy an empty ref — they track moving upstream and must re-resolve.
+  var bestVer = newVersion(0, 0, 0)
+  for rec in cfg.installedRecords(name):
+    if rec.version.len == 0:
+      continue
+    if refStr.len > 0:
+      if rec.version != refStr:
+        continue
+    else:
+      var v: Version
+      try: v = parseVersion(rec.version)
+      except CatchableError: continue
+      if result.len > 0 and cmp(v, bestVer) <= 0:
+        continue
+      bestVer = v
+    let verDir = cfg.pkgsPath() / name / rec.version
+    var onDisk = false
+    try: onDisk = cfg.driver.exists(relativePath(verDir, cfg.rootPath))
+    except: onDisk = dirExists(verDir)
+    if onDisk or (rec.path.len > 0 and dirExists(rec.path)):
+      result = rec.version
+
+proc closureOnDisk*(cfg: DatpkgrConfig, name: string): bool =
+  ## Every package in `name`'s recorded closure (roots included —
+  ## `collectInstalledDepNames` returns them) has an installed-manifest row
+  ## with an existing dir.
+  for n in cfg.collectInstalledDepNames(@[name]):
+    if not cfg.isInstalledOnDisk(n):
+      return false
+  true
+
+proc markInstalledRoot*(cfg: DatpkgrConfig, name, version: string) =
+  ## Promote an installed record to a root (explicitly installed) without
+  ## touching files — so a package first pulled as a dep survives pruning
+  ## after the user installs it directly. All other columns are preserved.
+  cfg.withDatpkgrDB do:
+    let tbl = cfg.stores.db.getTable("installed").get()
+    var targetPk = ""
+    var deps: seq[DepEntry] = @[]
+    var features: seq[string] = @[]
+    var path = ""
+    var installedAt = ""
+    for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():
+      if row["version"].strVal == version:
+        if row.hasKey("root") and row["root"].boolVal:
+          targetPk = ""  # already a root — nothing to do
+          break
+        targetPk = pk
+        try:
+          for dep in parseJson(row["deps"].jsonVal):
+            deps.add((dep["name"].getStr, dep["version"].getStr))
+        except CatchableError: discard
+        try:
+          if row.hasKey("features"):
+            for f in parseJson(row["features"].jsonVal):
+              features.add(f.getStr)
+        except CatchableError: discard
+        path = row["path"].strVal
+        if row.hasKey("installed_at"):
+          installedAt = row["installed_at"].strVal
+        break
+    if targetPk.len > 0:
+      discard cfg.stores.db.deleteRow("installed", targetPk)
+      var depsArr = newJArray()
+      for (dn, dv) in deps:
+        depsArr.add(%*{"name": dn, "version": dv})
+      discard cfg.stores.db.insertRow("installed", row({
+        "name": newTextValue(name),
+        "version": newTextValue(version),
+        "root": newBoolValue(true),
+        "features": newJSONValue(%features),
+        "deps": newJSONValue(depsArr),
+        "path": newTextValue(path),
+        "installed_at": newTextValue(installedAt)
+      }))
+      cfg.stores.db.checkpoint()
+
 proc resolveDepPathLike*(cfg: DatpkgrConfig, name: string): string =
   ## Locate the latest installed version dir for a package on disk (fallback
   ## for legacy installs that predate the recorded `path` column).
