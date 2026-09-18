@@ -596,9 +596,16 @@ proc refreshSource*(cfg: DatpkgrConfig, sourceName: string): bool =
     # only for the delete/reseed write below.
     cfg.withDatpkgrDB do:
       let tbl = cfg.stores.db.getTable("packages").get()
+      # Collect first: `allRows` holds a read lock across yields, so a
+      # `deleteRow` (submit + waitApplied) inside the loop deadlocks the
+      # concurrent store's write worker. Deleting after iteration releases
+      # the read lock first.
+      var toDelete: seq[string] = @[]
       for (pk, row) in tbl.allRows():
         if row["source"].strVal == src.name:
-          discard cfg.stores.db.deleteRow("packages", pk)
+          toDelete.add(pk)
+      for pk in toDelete:
+        discard cfg.stores.db.deleteRow("packages", pk)
       let count = cfg.seedPackagesTable(registryPackages, src.name)
       cfg.stores.db.checkpoint()
       cfg.logInfo("Updated " & src.name & " (" & $count & " packages)")
