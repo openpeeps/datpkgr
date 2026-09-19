@@ -246,7 +246,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     constraint: VersionConstraint = VersionConstraint(kind: vcAny, version: newVersion(0, 0, 0)),
     backend = "c", sourceFilter: string = "",
     buildHook: proc(pkgName: string, preferRef: string, backend: string): bool = nil,
-    suppressSummary = false, depsOnly = false): bool =
+    suppressSummary = false, depsOnly = false, showTree = true): bool =
   ## Generic install via cfg. Returns true on success.
   ## `buildHook` is opt-in (builder stays in clue).
   ## When `depsOnly` is true the requested package itself is skipped (no
@@ -304,7 +304,6 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       try: rootExists = cfg.driver.exists(relativePath(rootDest, cfg.rootPath))
       except: rootExists = dirExists(rootDest)
       if not rootExists:
-        progress("fetching " & curName & "...")
         # Clone-start line fires inside the git layer (single emit point).
         if not cfg.clonePackage(rootMeta.url, rootDest):
           fail("Failed to fetch " & curName)
@@ -586,7 +585,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
           let dn = depName(d)
           if dn.len > 0 and dn notin depsOnlyDirect:
             depsOnlyDirect.add(dn)
-    if verbose:
+    if verbose and showTree:
       cfg.logInfo("Dependency tree")
       proc renderDepTree(name: string, leading: string, isLast: bool, isRoot: bool,
           path: var HashSet[string]) =

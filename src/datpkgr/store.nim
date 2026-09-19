@@ -191,12 +191,17 @@ proc openDatpkgrStores*(cfg: DatpkgrConfig) =
   cfg.driver.makeDir("bin")
   cfg.driver.makeDir("develop")
 
+  # Single-threaded opens on purpose: every `withDatpkgrDB` touch runs on
+  # the caller's thread (the store isn't thread-safe), so a background
+  # concurrent write worker is pure overhead — and its lifecycle across our
+  # rapid open/checkpoint/close scope churn raced with in-flight flushes,
+  # segfaulting on fresh databases (high write volume). See clue#SIGSEGV.
   cfg.stores.db = newStore(cfg.dbPath(), StorageMode.smDisk,
                     enableWal = true, walFlushEveryOps = 100'u32,
-                    enableConcurrency = true)
+                    enableConcurrency = false)
   cfg.stores.versionsDB = newStore(cfg.versionsDBPath(), StorageMode.smDisk,
                         enableWal = true, walFlushEveryOps = 100'u32,
-                        enableConcurrency = true)
+                        enableConcurrency = false)
   ensureDatpkgrSignalHandlers()
   cfg.stores.initialized = true
 

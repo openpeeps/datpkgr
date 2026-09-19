@@ -170,10 +170,28 @@ proc warnDevShadow(cfg: DatpkgrConfig, name, chosenPath: string) =
         devVer = rec.version
     elif registryVer.len == 0:
       registryVer = rec.version
+  if devVer.len == 0:
+    # No versioned dev-install record — read the version from the live
+    # checkout's manifest so the warning never prints a bare "?".
+    let devPath = cfg.developPath() / name
+    var realDev = devPath
+    try: realDev = expandSymlink(devPath)
+    except: discard
+    var mf = cfg.findManifestInDir(realDev)
+    if mf.len == 0:
+      mf = cfg.findManifestForDir(realDev)
+    if mf.len == 0:
+      mf = cfg.findManifestInDir(devPath)
+    if mf.len > 0:
+      try:
+        let m = cfg.parseManifest(readFile(mf), mf)
+        if m.version.len > 0:
+          devVer = m.version
+      except CatchableError: discard
   if registryVer.len > 0:
     warnedDevShadows.incl(name)
     let dev = if devVer.len > 0: devVer else: "?"
-    cfg.logWarn(name & ": using develop-mode source " & dev &
+    cfg.logWarn(name & ": using devel source " & dev &
       " that shadows installed version " & registryVer &
       " — building against live source (" & chosenPath & ")")
 
