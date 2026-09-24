@@ -187,9 +187,11 @@ suite "operations — installPackage develop root":
     cfg.manifestParser = fakeParser
     cfg.initDatpkgr()
     let srcDir = createTempDir("datpkgr_devsrc_", "")
-    defer: removeDir(srcDir)
+    defer:
+      cfg.safeRemoveSymlink(cfg.developPath() / "devpkg")
+      removeDir(srcDir)
     writeFile(srcDir / "manifest.json", "version = \"1.2.3\"\n")
-    createSymlink(srcDir, cfg.developPath() / "devpkg")
+    check cfg.createDevelopLink(srcDir, cfg.developPath() / "devpkg")
     check cfg.fetchPkgMeta("devpkg", "nim-lang").isSome
     check cfg.installPackage("devpkg", verbose = false, suppressSummary = true)
     check cfg.installedRecords("devpkg").len == 1

@@ -4,7 +4,7 @@
 #          Made by Humans from OpenPeeps
 #          https://github.com/openpeeps/datpkgr
 
-import std/[os, strutils, tables, json]
+import std/[os, osproc, strutils, tables, json]
 import pkg/flysystem
 import pkg/boogie/stores/rdbms
 import ./types
@@ -228,9 +228,73 @@ proc safeRemoveSymlink*(cfg: DatpkgrConfig, p: string) =
   if not cfg.isInsideDevelop(p):
     cfg.logDebug("refusing to remove outside develop: " & p)
     return
+  when defined(windows):
+    # Windows links in develop/ are either true symlinks (admin/Developer
+    # Mode) or NTFS junctions (privilege-free fallback from createDevelopLink).
+    # Both report symlinkExists=true (any reparse point) with dirExists=true,
+    # so reparse-tag sniffing is unnecessary — but removal MUST NOT go through
+    # driver.delete: its removeDir fallback would recurse into the link
+    # target. `rmdir` (no /S) removes symlinks-to-dirs and junctions as links
+    # only, never traversing; it fails on real non-empty dirs (safe).
+    try:
+      if symlinkExists(p) and dirExists(p):
+        let (_, code) = execCmdEx("cmd /c rmdir " & quoteShell(p))
+        if code == 0:
+          return
+        cfg.logDebug("safeRemoveSymlink rmdir failed for: " & p)
+        return
+      elif symlinkExists(p):
+        # File symlink (or broken link): unlink the entry itself.
+        try:
+          removeFile(p)
+          return
+        except CatchableError:
+          let (_, code) = execCmdEx("cmd /c rmdir " & quoteShell(p))
+          if code == 0:
+            return
+          cfg.logDebug("safeRemoveSymlink failed for: " & p)
+          return
+      elif dirExists(p):
+        # A real directory (not a link) — never touch it.
+        cfg.logDebug("refusing to remove real directory in develop: " & p)
+        return
+    except CatchableError as e:
+      cfg.logDebug("safeRemoveSymlink failed: " & e.msg)
+      return
   let rel = relativePath(p, cfg.rootPath)
   try:
     if cfg.driver.isSymlink(rel) or cfg.driver.exists(rel):
       cfg.driver.delete(rel)
   except CatchableError as e:
     cfg.logDebug("safeRemoveSymlink failed: " & e.msg)
+
+proc createDevelopLink*(cfg: DatpkgrConfig, target, link: string): bool =
+  ## Create the develop-mode entry `link` → `target` (both absolute).
+  ## POSIX uses a symlink. On Windows a symlink needs admin/Developer Mode,
+  ## so fall back to an NTFS junction (`mklink /J`, privilege-free for
+  ## directories). Junctions traverse transparently and `expandSymlink` is a
+  ## noop on Windows, so readers need no changes; removal goes through
+  ## `safeRemoveSymlink`, which unlinks junctions without touching targets.
+  when defined(windows):
+    try:
+      createSymlink(target, link)
+      return true
+    except OSError:
+      cfg.logDebug("symlink needs privilege, falling back to junction for: " & link)
+    except CatchableError as e:
+      cfg.logDebug("symlink failed: " & e.msg)
+    try:
+      let (_, code) = execCmdEx("cmd /c mklink /J " & quoteShell(link) &
+        " " & quoteShell(target))
+      if code == 0 and dirExists(link):
+        return true
+    except CatchableError as e:
+      cfg.logDebug("junction failed: " & e.msg)
+    return false
+  else:
+    try:
+      createSymlink(target, link)
+      return true
+    except CatchableError as e:
+      cfg.logDebug("symlink failed: " & e.msg)
+      return false

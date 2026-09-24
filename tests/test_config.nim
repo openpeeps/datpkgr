@@ -80,12 +80,9 @@ suite "config — safeRemove guards":
     createDir(target)
     createDir(link.parentDir())
     defer:
+      removeDirLink(link)
       removeDir(target)
-      if symlinkExists(link):
-        try: removeFile(link)
-        except OSError:
-          try: removeDir(link) except OSError: discard
-    createSymlink(target, link)
+    makeDirLink(target, link)
     cfg.safeRemoveSymlink(link)
     check symlinkExists(link)
 
@@ -96,13 +93,10 @@ suite "config — safeRemove guards":
     let target = getTempDir() / "datpkgr_develop_target" / $getCurrentProcessId()
     createDir(target)
     defer:
-      if symlinkExists(cfg.developPath() / "mydev"):
-        try: removeFile(cfg.developPath() / "mydev")
-        except OSError:
-          try: removeDir(cfg.developPath() / "mydev") except OSError: discard
+      removeDirLink(cfg.developPath() / "mydev")
       removeDir(target)
     let link = cfg.developPath() / "mydev"
-    createSymlink(target, link)
+    makeDirLink(target, link)
     check symlinkExists(link)
     cfg.safeRemoveSymlink(link)
     check not symlinkExists(link)

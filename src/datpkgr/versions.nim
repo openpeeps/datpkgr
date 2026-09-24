@@ -357,40 +357,37 @@ proc discoverVersions*(cfg: DatpkgrConfig, name, url: string, refresh = false,
   cfg.cacheVersions(name, result)
 
 type
-  TagFetchJob* = tuple[name: string, url: string, dest: string, refresh: bool,
-    allowSubmodules: bool]
-  TagFetchRes* = tuple[name: string, tags: seq[string]]
+  TagFetchJob* = tuple[idx: int, name: string, url: string, dest: string,
+    refresh: bool, allowSubmodules: bool]
+  TagFetchRes* = tuple[idx: int, ok: bool]
 
 proc fetchTagsJob*(job: TagFetchJob,
     progress: Chan[ProgressEvent]): TagFetchRes {.gcsafe.} =
   ## Pool worker for `discoverVersionsBatch`: ensures the package is present
   ## in `_cache` — cloning on a miss, fetching new tags on an existing clone
   ## when `refresh` is set — then lists its local git tags. Non-interactive
-  ## so dead URLs fail fast. Worker-safe: plain values in, no `cfg`, no DB,
-  ## no callbacks — progress crosses via the channel, DB writes happen on
-  ## the caller's thread after the join.
+  ## so dead URLs fail fast. Worker-safe: no `cfg`, no DB, no callbacks.
+  ## Threading: only `idx`/bools cross back to main (see pool.nim contract);
+  ## progress carries the job index and the caller resolves display strings
+  ## from its own jobs; tag lists are re-read on the caller via
+  ## `findLocalTags`, never shipped across threads.
   ## Emits exactly one start event: `pkFetchStart` for the fast local path,
   ## `pkCloneStart` whenever network work (clone/fetch) may run.
   try:
     if not job.refresh and dirExists(job.dest):
-      discard progress.trySend(ProgressEvent(kind: pkFetchStart,
-        name: job.name))
+      discard progress.trySend(ProgressEvent(kind: pkFetchStart, idx: job.idx))
     else:
-      discard progress.trySend(ProgressEvent(kind: pkCloneStart,
-        name: job.name, url: job.url))
+      discard progress.trySend(ProgressEvent(kind: pkCloneStart, idx: job.idx))
     if not dirExists(job.dest):
       if not cloneRepoRaw(job.url, job.dest, nonInteractive = true,
           allowSubmodules = job.allowSubmodules):
-        return (job.name, @[])
+        return (job.idx, false)
     elif job.refresh:
       discard refreshRemoteTagsRaw(job.dest, job.url, nonInteractive = true,
         allowSubmodules = job.allowSubmodules)
-    let tags =
-      try: findLocalTags(job.dest)
-      except: @[]
-    (job.name, tags)
+    (job.idx, true)
   except:
-    (job.name, @[])
+    (job.idx, false)
 
 proc installedVersionsForReuse*(cfg: DatpkgrConfig, name: string): seq[DiscoveredVersion] =
   ## Installed-on-disk versions for `name`, newest first: records from the
@@ -480,17 +477,43 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
       except: hasDest = dirExists(dest)
       if hasDest:
         preExisted.incl(pkg.name)
-      jobs.add((pkg.name, pkg.url, dest, refresh,
+      jobs.add((jobs.len, pkg.name, pkg.url, dest, refresh,
         cfg.allowSubmodules))
     let (resSeq, progSeq) = runPool(jobs, fetchTagsJob)
-    cfg.replayProgress(progSeq)
+    # Replay progress on this thread, resolving display strings from our own
+    # jobs (worker → main payloads are index-only by pool.nim contract).
+    for ev in progSeq:
+      if ev.idx < 0 or ev.idx >= jobs.len:
+        continue
+      let j = jobs[ev.idx]
+      case ev.kind
+      of pkFetchStart:
+        if cfg.callbacks.onFetchStart != nil:
+          cfg.callbacks.onFetchStart(j.name)
+      of pkCloneStart:
+        if cfg.callbacks.onCloneStart != nil:
+          cfg.callbacks.onCloneStart(j.name, j.url)
+      of pkInstallStart:
+        discard
     for r in resSeq:
-      let versions = discoverFromTags(r.name, r.tags)
-      cfg.debugLog("discover " & r.name & ": " & $versions.len & " version(s), " & $r.tags.len & " tag(s)")
-      cfg.cacheVersions(r.name, versions)
-      result[r.name] = versions
+      if r.idx < 0 or r.idx >= jobs.len:
+        continue
+      let j = jobs[r.idx]
+      # Re-list tags here on the caller: the worker ensured the clone/fetch
+      # above, and shipping the tag list across threads would violate the
+      # pool contract (SIGSEGV). A failed clone yields an empty tag list,
+      # exactly like the old `(name, @[])` failure value.
+      let tags =
+        if not r.ok: @[]
+        else:
+          try: findLocalTags(j.dest)
+          except: @[]
+      let versions = discoverFromTags(j.name, tags)
+      cfg.debugLog("discover " & j.name & ": " & $versions.len & " version(s), " & $tags.len & " tag(s)")
+      cfg.cacheVersions(j.name, versions)
+      result[j.name] = versions
       if onDone != nil:
-        onDone(r.name, versions.len, not refresh and r.name in preExisted)
+        onDone(j.name, versions.len, not refresh and j.name in preExisted)
 
 proc headVersion*(cfg: DatpkgrConfig, name: string): Version =
   ## Version to register for a package with no semver tags: the version

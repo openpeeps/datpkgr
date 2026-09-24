@@ -105,6 +105,7 @@ proc fetchEventText(name: string, count: int, cached: bool): string =
 
 type
   InstallJob = object
+    idx: int
     name: string
     cacheDir: string
     verDir: string
@@ -166,13 +167,13 @@ proc installResolvedPkg(job: InstallJob): bool {.gcsafe.} =
 proc installWorker*(job: InstallJob,
     progress: Chan[ProgressEvent]): bool {.gcsafe.} =
   ## Pool worker: announces the start through the progress channel (replayed
-  ## on the caller's thread post-join), then checks out and copies.
+  ## on the caller's thread post-join, resolved from the caller's own jobs
+  ## via `idx` per the pool.nim contract), then checks out and copies.
   ## Finish lines are printed in bulk by the caller under a `Resolved
-  ## packages:` header (deterministic order). Worker-safe: plain values in,
-  ## raw filesystem/git only — no `cfg`, no DB, no callbacks.
+  ## packages:` header (deterministic order). Worker-safe: raw
+  ## filesystem/git only — no `cfg`, no DB, no callbacks.
   try:
-    discard progress.trySend(ProgressEvent(kind: pkInstallStart,
-      name: job.name, label: job.verStr))
+    discard progress.trySend(ProgressEvent(kind: pkInstallStart, idx: job.idx))
     installResolvedPkg(job)
   except:
     false
@@ -729,7 +730,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
             result.add(v.getStr)
       let ex = manifest.extra
       let srcDirVal = if ex != nil and ex.hasKey("srcDir"): ex["srcDir"].getStr else: ""
-      jobs.add(InstallJob(name: rp.name, cacheDir: cacheDir, verDir: verDir,
+      jobs.add(InstallJob(idx: jobs.len, name: rp.name, cacheDir: cacheDir, verDir: verDir,
         refStr: meta.refStr, verStr: verStr, refresh: refresh,
         allowSubmodules: cfg.allowSubmodules, label: label,
         manifestPath: manifest.path, srcDir: srcDirVal,
@@ -747,9 +748,11 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       # packages:` — start events are replayed here post-join.
       let (results, progSeq) = runPool(jobs, installWorker)
       if cfg.callbacks.onInstallStart != nil:
+        # Replay start events post-join, resolving labels from our own jobs
+        # (worker → main payloads are index-only by pool.nim contract).
         for ev in progSeq:
-          if ev.kind == pkInstallStart:
-            cfg.callbacks.onInstallStart(formatLabel(ev.name, ev.label))
+          if ev.kind == pkInstallStart and ev.idx >= 0 and ev.idx < jobLabels.len:
+            cfg.callbacks.onInstallStart(jobLabels[ev.idx])
             try: flushFile(stdout) except: discard
       for i, ok in results:
         if ok:
@@ -889,8 +892,11 @@ proc developPackage*(cfg: DatpkgrConfig, dir: string, verbose = true): bool =
     discard existsOrCreateDir(cfg.developPath())
   cfg.safeRemoveSymlink(linkPath)
   # createSymlink target `dir` is outside driver root, so raw std/os is required
-  # (driver.createSymlink validates target inside root via resolvePath)
-  createSymlink(dir, linkPath)
+  # (driver.createSymlink validates target inside root via resolvePath).
+  # On Windows without symlink privilege this falls back to a junction.
+  if not cfg.createDevelopLink(dir, linkPath):
+    cfg.logError("Could not link " & linkPath & " (symlink needs admin/Developer Mode and junction fallback failed)")
+    return false
   var deps: seq[types.DepEntry]
   for d in manifest.dependencies:
     if d.isToolchain: continue

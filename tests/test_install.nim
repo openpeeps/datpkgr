@@ -153,8 +153,10 @@ suite "install — record and query":
     cfg.initDatpkgr()
     cfg.recordInstall("pkg", "9.9.9", @[], root=false, installPath=cfg.pkgsPath()/"pkg"/"9.9.9")
     let srcDir = createTempDir("datpkgr_devsrc_", "")
-    defer: removeDir(srcDir)
-    createSymlink(srcDir, cfg.developPath() / "pkg")
+    defer:
+      cfg.safeRemoveSymlink(cfg.developPath() / "pkg")
+      removeDir(srcDir)
+    check cfg.createDevelopLink(srcDir, cfg.developPath() / "pkg")
     cfg.recordInstall("pkg", "0.1.0", @[], root=true, installPath=cfg.developPath()/"pkg")
     check cfg.resolveInstalledPath("pkg", "") == expandSymlink(cfg.developPath() / "pkg")
 
@@ -164,8 +166,10 @@ suite "install — record and query":
     cfg.initDatpkgr()
     cfg.recordInstall("pkg", "0.2.0", @[], root=false, installPath=cfg.pkgsPath()/"pkg"/"0.2.0")
     let srcDir = createTempDir("datpkgr_devsrc_", "")
-    defer: removeDir(srcDir)
-    createSymlink(srcDir, cfg.developPath() / "pkg")
+    defer:
+      cfg.safeRemoveSymlink(cfg.developPath() / "pkg")
+      removeDir(srcDir)
+    check cfg.createDevelopLink(srcDir, cfg.developPath() / "pkg")
     cfg.recordInstall("pkg", "0.1.0", @[], root=true, installPath=cfg.developPath()/"pkg")
     # pin names the registry version the checkout does not satisfy
     check cfg.resolveInstalledPath("pkg", "0.2.0") == cfg.pkgsPath()/"pkg"/"0.2.0"
@@ -177,8 +181,10 @@ suite "install — record and query":
     defer: cleanupCfg(cfg)
     cfg.initDatpkgr()
     let srcDir = createTempDir("datpkgr_devsrc_", "")
-    defer: removeDir(srcDir)
-    createSymlink(srcDir, cfg.developPath() / "pkg")
+    defer:
+      cfg.safeRemoveSymlink(cfg.developPath() / "pkg")
+      removeDir(srcDir)
+    check cfg.createDevelopLink(srcDir, cfg.developPath() / "pkg")
     check cfg.resolveInstalledPath("pkg", "") == expandSymlink(cfg.developPath() / "pkg")
 
   test "allInstalledPaths prefers develop over newer registry copy":
@@ -187,8 +193,10 @@ suite "install — record and query":
     cfg.initDatpkgr()
     cfg.recordInstall("pkg", "9.9.9", @[], root=false, installPath=cfg.pkgsPath()/"pkg"/"9.9.9")
     let srcDir = createTempDir("datpkgr_devsrc_", "")
-    defer: removeDir(srcDir)
-    createSymlink(srcDir, cfg.developPath() / "pkg")
+    defer:
+      cfg.safeRemoveSymlink(cfg.developPath() / "pkg")
+      removeDir(srcDir)
+    check cfg.createDevelopLink(srcDir, cfg.developPath() / "pkg")
     cfg.recordInstall("pkg", "0.1.0", @[], root=true, installPath=cfg.developPath()/"pkg")
     let paths = cfg.allInstalledPaths()
     check paths.len == 1

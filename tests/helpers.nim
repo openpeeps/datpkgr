@@ -1,6 +1,44 @@
 import std/[os, strutils, tempfiles, json]
+when defined(windows):
+  import std/osproc
 import datpkgr/config
 import datpkgr/types
+
+when defined(windows):
+  proc makeDirLink*(target, link: string) =
+    ## Fixture dir link without privilege: real symlink when allowed,
+    ## otherwise an NTFS junction (`mklink /J` needs none). Both report
+    ## `symlinkExists` (any reparse point).
+    try:
+      createSymlink(target, link)
+      return
+    except OSError:
+      discard
+    let (_, code) = execCmdEx("cmd /c mklink /J " & quoteShell(link) &
+      " " & quoteShell(target))
+    doAssert code == 0, "could not create fixture link: " & link
+
+  proc removeDirLink*(link: string) =
+    ## Unlink a fixture dir link (symlink or junction) without touching its
+    ## target — `removeDir` would recurse through junctions.
+    if symlinkExists(link) and dirExists(link):
+      let (_, code) = execCmdEx("cmd /c rmdir " & quoteShell(link))
+      if code == 0:
+        return
+    try:
+      removeFile(link)
+    except OSError:
+      try: removeDir(link) except OSError: discard
+else:
+  proc makeDirLink*(target, link: string) =
+    createSymlink(target, link)
+
+  proc removeDirLink*(link: string) =
+    if symlinkExists(link):
+      try:
+        removeFile(link)
+      except OSError:
+        try: removeDir(link) except OSError: discard
 
 proc tempCfg*(app = "datpkgr_test"): DatpkgrConfig =
   let dir = createTempDir("datpkgr_", "")

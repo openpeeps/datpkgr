@@ -5,17 +5,23 @@
 #          https://github.com/openpeeps/datpkgr
 #
 # Bounded worker pool used only by the install path (version discovery,
-# file install, multi-root updates). Workers are plain `{.gcsafe.}` procs
-# exchanging only value data through channels — they never touch `cfg`,
-# the stores, or host callbacks. All progress events are replayed on the
-# caller's thread AFTER the join (post-await drain), so host display code
-# always runs single-threaded.
+# file install, multi-root updates). Workers are plain `{.gcsafe.}` procs.
+#
+# Threading contract (Windows SIGSEGV on fresh installs): worker → main
+# payloads must be PLAIN DATA (ints/bools) — never strings, seqs, or any
+# other GC refs. The channel moves the sender-side copy away, so the
+# worker's own GC frees those cells during a later job's churn while the
+# main thread still reads them post-join (nil read in dealloc). Display
+# strings are resolved main-side from the caller's own jobs via `idx`.
+# Jobs (main → worker) may carry strings: the caller holds its `jobs` seq
+# alive across the join and the main thread performs no GC-triggering
+# allocation while blocked in it, so workers always read them intact.
+# Progress events are replayed on the caller's thread AFTER the join
+# (post-await drain), so host display code always runs single-threaded.
 
 import pkg/threading/channels
 import std/isolation
 from std/osproc import countProcessors
-
-import ./config
 
 type
   ProgressKind* = enum
@@ -24,10 +30,10 @@ type
     pkInstallStart
 
   ProgressEvent* = object
+    ## Progress marker, worker → main. Plain data only (see contract above):
+    ## the caller resolves display strings from its own jobs via `idx`.
     kind*: ProgressKind
-    name*: string
-    label*: string
-    url*: string
+    idx*: int
 
 proc poolSizeFor*(nJobs: int): int =
   ## Worker count: `min(cpuCount, jobs)`, at least 1 when work exists.
@@ -41,30 +47,16 @@ proc poolSizeFor*(nJobs: int): int =
     cpus = 1
   max(1, min(nJobs, cpus))
 
-proc replayProgress*(cfg: DatpkgrConfig, events: seq[ProgressEvent]) =
-  ## Replays worker progress on the caller's thread (main-thread only).
-  ## Workers only ever `trySend` these; invocation of host callbacks
-  ## happens exclusively here, never off-thread.
-  for ev in events:
-    case ev.kind
-    of pkFetchStart:
-      if cfg.callbacks.onFetchStart != nil:
-        cfg.callbacks.onFetchStart(ev.name)
-    of pkCloneStart:
-      if cfg.callbacks.onCloneStart != nil:
-        cfg.callbacks.onCloneStart(ev.name, ev.url)
-    of pkInstallStart:
-      if cfg.callbacks.onInstallStart != nil:
-        cfg.callbacks.onInstallStart(ev.label)
-
 proc runPool*[J, R](jobs: seq[J],
     worker: proc(job: J, progress: Chan[ProgressEvent]): R {.gcsafe.}):
     tuple[results: seq[R], progress: seq[ProgressEvent]] =
   ## Runs `worker` over `jobs` on a bounded std-thread pool and joins.
   ## Results come back in input order; progress events come back in channel
-  ## (FIFO send) order for the caller to replay via `replayProgress`.
+  ## (FIFO send) order for the caller to replay on its own thread, resolving
+  ## display strings from its own `jobs` via `ProgressEvent.idx`.
   ## Workers must be total (never raise): every fallible operation maps to
   ## a failure value of `R`, since a dead worker would stall the drain.
+  ## `R` must be plain data (ints/bools) — see the threading contract above.
   result.results = @[]
   result.progress = @[]
   if jobs.len == 0:
