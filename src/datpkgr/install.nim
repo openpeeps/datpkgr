@@ -192,8 +192,7 @@ proc warnDevShadow(cfg: DatpkgrConfig, name, chosenPath: string) =
     warnedDevShadows.incl(name)
     let dev = if devVer.len > 0: devVer else: "?"
     cfg.logWarn(name & ": using devel source " & dev &
-      " that shadows installed version " & registryVer &
-      " — building against live source (" & chosenPath & ")")
+      " shadows installed version " & registryVer)
 
 proc collectInstalledDepNames*(cfg: DatpkgrConfig, rootNames: seq[string]): seq[string] =
   ## BFS over the installed manifest graph to collect every reachable
