@@ -40,10 +40,13 @@ proc runPoolStreaming*[J, R](jobs: seq[J],
     onResult: proc(idx: int, res: R)):
     tuple[results: seq[R], progress: seq[ProgressEvent]] =
   ## Like `runPool`, but `onResult` fires on the calling thread as each result
-  ## arrives rather than all at once after the join, so a long run reports
-  ## progress instead of going quiet. Everything else is identical — in
-  ## particular `onResult` is still single-threaded and may touch the display,
-  ## and progress events are still drained on this thread.
+  ## arrives rather than in one burst once every worker has been joined, so a
+  ## long run reports progress instead of going quiet. Everything else is
+  ## identical — in particular `onResult` is still single-threaded and may
+  ## touch the display, results still come back in input order, and progress
+  ## events are still drained on this thread.
+  ## Callbacks fire in *completion* order, so index anything display-related
+  ## through the `idx` against your own `jobs`.
   result.results = @[]
   result.progress = @[]
   if jobs.len == 0:
@@ -75,8 +78,10 @@ proc runPoolStreaming*[J, R](jobs: seq[J],
   # Stop pills: one per worker, queued behind all real jobs.
   for _ in 0 ..< nWorkers:
     jobCh.send(isolate((idx: -1, job: jobs[0])))
-  for t in threads.mitems:
-    joinThread(t)
+  # Drain while the workers are still running: every job produces exactly one
+  # result, so receiving `jobs.len` of them means each worker has already sent
+  # and only has to pick up its stop pill. Joining first would sit here until
+  # the slowest job finished and `onResult` would fire in one burst at the end.
   result.results = newSeq[R](jobs.len)
   var ev: ProgressEvent
   for _ in 0 ..< jobs.len:
@@ -86,6 +91,8 @@ proc runPoolStreaming*[J, R](jobs: seq[J],
     while progCh.tryRecv(ev):
       result.progress.add(ev)
       ev = ProgressEvent()
+  for t in threads.mitems:
+    joinThread(t)
 
 proc runPool*[J, R](jobs: seq[J],
     worker: proc(job: J, progress: Chan[ProgressEvent]): R {.gcsafe.}):
