@@ -4,7 +4,7 @@
 #          Made by Humans from OpenPeeps
 #          https://github.com/openpeeps/datpkgr
 
-import std/[os, osproc, strutils, tables, json]
+import std/[os, osproc, strutils, tables, json, terminal, sequtils]
 import pkg/flysystem
 import pkg/boogie/stores/rdbms
 import ./types
@@ -17,8 +17,20 @@ type
     lvlWarn
     lvlError
 
+  LogSpan* = tuple
+    fg: ForegroundColor
+    bg: BackgroundColor
+    text: string
+      ## One styled slice of a single log line. Uses `std/terminal`'s color
+      ## enums so hosts can hand them straight to their own display layer
+      ## without a translation table, and no terminal is touched here.
+
   Callbacks* = object
     log*: proc(level: LogLevel, msg: string) {.gcsafe.}
+    logStyled*: proc(level: LogLevel, spans: seq[LogSpan]) {.gcsafe.}
+      ## Optional styled sink for the span overloads. When nil, spans are
+      ## flattened into a plain `log` call so hosts with no color support
+      ## still get the whole message.
     onFetch*: proc(name: string, versions: int, cached: bool) {.gcsafe.}
     onCloneStart*: proc(name, url: string) {.gcsafe.}
       ## Fired the moment a package clone/fetch starts (inside the
@@ -186,6 +198,22 @@ proc logInfo*(cfg: DatpkgrConfig, msg: string) =
 proc logWarn*(cfg: DatpkgrConfig, msg: string) =
   if cfg.callbacks.log != nil:
     cfg.callbacks.log(lvlWarn, msg)
+
+proc logStyled*(cfg: DatpkgrConfig, level: LogLevel, spans: varargs[LogSpan]) =
+  ## Emit one line made of styled slices. Prefers the host's styled sink and
+  ## falls back to the plain one by concatenating the slice texts.
+  let parts = spans.toSeq()
+  if cfg.callbacks.logStyled != nil:
+    cfg.callbacks.logStyled(level, parts)
+  elif cfg.callbacks.log != nil:
+    var msg = ""
+    for s in parts:
+      msg.add(s.text)
+    cfg.callbacks.log(level, msg)
+
+proc logWarn*(cfg: DatpkgrConfig, spans: varargs[LogSpan]) =
+  if cfg.callbacks.log != nil or cfg.callbacks.logStyled != nil:
+    cfg.logStyled(lvlWarn, spans)
 
 proc logSuccess*(cfg: DatpkgrConfig, msg: string) =
   if cfg.callbacks.log != nil:

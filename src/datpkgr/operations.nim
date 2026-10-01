@@ -91,6 +91,19 @@ proc isRecordRoot*(name, curName: string, depsOnly: bool,
     return true
   false
 
+type
+  ClosureRoot* = object
+    ## One direct dependency of a root package that this kit does not own (a
+    ## local project whose manifest lives in the working tree, say). Passing
+    ## these to `installPackage` installs the whole closure in a *single*
+    ## resolution pass instead of one pass per direct dep — the whole point,
+    ## since each pass redoes discovery, resolution, record writes and pruning.
+    name*: string
+    constraint*: VersionConstraint
+    features*: seq[string]
+    url*: string
+    refStr*: string
+
 proc fetchEventText(name: string, count: int, cached: bool): string =
   if cached:
     result = name & " (cached)"
@@ -247,15 +260,20 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     constraint: VersionConstraint = VersionConstraint(kind: vcAny, version: newVersion(0, 0, 0)),
     backend = "c", sourceFilter: string = "",
     buildHook: proc(pkgName: string, preferRef: string, backend: string): bool = nil,
-    suppressSummary = false, depsOnly = false, showTree = true): bool =
+    suppressSummary = false, depsOnly = false, showTree = true,
+    directRoots: seq[ClosureRoot] = @[]): bool =
   ## Generic install via cfg. Returns true on success.
   ## `buildHook` is opt-in (builder stays in clue).
   ## When `depsOnly` is true the requested package itself is skipped (no
   ## files, no record, no build) and only its dependency closure is installed;
   ## the root's direct deps are recorded as roots so pruning keeps them.
+  ## When `directRoots` is non-empty the whole closure of those dependencies is
+  ## resolved and installed in one pass. `pkgName` is then only a label: it is
+  ## never resolved against the registry, cloned, installed or recorded.
   let isOuter = installDepth == 0
   inc installDepth
   defer: dec installDepth
+  let closureMode = directRoots.len > 0
 
   # NOTE: deliberately NOT wrapped in `withDatpkgrDB`. DB access happens in
   # short per-operation scopes (fetch/cache/record helpers self-scope), so
@@ -280,7 +298,12 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
 
     var rootMeta: PkgRef
     var curName = pkgName
-    if url.len > 0:
+    if closureMode:
+      # Label-only root: nothing to resolve or clone, `directRoots` seed the
+      # resolution instead.
+      rootMeta = PkgRef(name: curName, url: "", refStr: "")
+      ensureHeader()
+    elif url.len > 0:
       rootMeta = PkgRef(name: curName, url: url, refStr: "")
     else:
       let rootMetaOpt = cfg.resolveRootMeta(curName, sourceFilter)
@@ -293,28 +316,28 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     # Header goes here: the package is known to exist (unknown names already
     # returned above), and no clone/progress line has printed yet — so it
     # always leads the output instead of landing mid-stream.
-    ensureHeader()
-
-    let isDevelopRoot = rootMeta.url.len == 0 and cfg.isDevelopAvailable(curName)
     var rootDest = cfg.pkgsCachePath() / curName
-    if isDevelopRoot:
-      rootDest = cfg.developPath() / curName
-      progress("using develop " & curName)
-    else:
-      var rootExists = false
-      try: rootExists = cfg.driver.exists(relativePath(rootDest, cfg.rootPath))
-      except: rootExists = dirExists(rootDest)
-      if not rootExists:
-        # Clone-start line fires inside the git layer (single emit point).
-        if not cfg.clonePackage(rootMeta.url, rootDest):
-          fail("Failed to fetch " & curName)
-          return false
-      else:
-        progress("Using cached " & curName)
-        if refresh:
-          discard cfg.clonePackage(rootMeta.url, rootDest, refresh = true)
+    if not closureMode:
+      ensureHeader()
 
-    if url.len > 0:
+      if rootMeta.url.len == 0 and cfg.isDevelopAvailable(curName):
+        rootDest = cfg.developPath() / curName
+        progress("using develop " & curName)
+      else:
+        var rootExists = false
+        try: rootExists = cfg.driver.exists(relativePath(rootDest, cfg.rootPath))
+        except: rootExists = dirExists(rootDest)
+        if not rootExists:
+          # Clone-start line fires inside the git layer (single emit point).
+          if not cfg.clonePackage(rootMeta.url, rootDest):
+            fail("Failed to fetch " & curName)
+            return false
+        else:
+          progress("Using cached " & curName)
+          if refresh:
+            discard cfg.clonePackage(rootMeta.url, rootDest, refresh = true)
+
+    if url.len > 0 and not closureMode:
       let nf = cfg.findManifestInDir(rootDest)
       if nf.len > 0:
         let canonical = manifestCanonicalName(cfg, nf)
@@ -372,6 +395,30 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     var registered = initHashSet[string]()
     var tagless = initHashSet[string]()
     var pkgRefs = initTable[string, PkgRef]()
+    var rootNames: seq[string] = @[curName]
+    var resolveRoots: seq[Dependency] =
+      @[Dependency(name: curName, constraint: rootConstraint, features: features)]
+    if closureMode:
+      # `curName` is a label here, never a resolution root. Seed from the
+      # caller's direct deps instead and treat them as the record roots.
+      rootNames = @[]
+      resolveRoots = @[]
+      for r in directRoots:
+        if r.name.len == 0:
+          continue
+        var meta = PkgRef(name: r.name, url: r.url, refStr: r.refStr)
+        if meta.url.len == 0 and not cfg.isDevelopAvailable(r.name):
+          let m = cfg.fetchPkgMeta(r.name, sourceFilter)
+          if m.isSome:
+            meta = m.get()
+        if meta.url.len == 0 and not cfg.isDevelopAvailable(r.name):
+          warn("Unknown package in registry, skipping: " & r.name)
+          continue
+        if not pkgRefs.hasKey(r.name):
+          pkgRefs[r.name] = meta
+        rootNames.add(r.name)
+        resolveRoots.add(Dependency(name: r.name, constraint: r.constraint,
+          features: r.features))
     pkgRefs[curName] = rootMeta
 
     proc registerVersions(name: string, versions: seq[DiscoveredVersion]) =
@@ -391,13 +438,15 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
             version: v.version, dependencies: @[]))
       registered.incl(name)
 
-    registerVersions(curName, cfg.discoverVersions(curName, rootMeta.url, refresh))
-    cfg.logDebug("root: " & curName & " (" & rootMeta.url & "), " &
-      pluralize(registry[curName].len, "version") & " indexed")
+    if not closureMode:
+      registerVersions(curName, cfg.discoverVersions(curName, rootMeta.url, refresh))
+      cfg.logDebug("root: " & curName & " (" & rootMeta.url & "), " &
+        pluralize(registry[curName].len, "version") & " indexed")
 
     var seen = initHashSet[string]()
-    seen.incl(curName)
-    var expandQueue = @[curName]
+    for n in rootNames:
+      seen.incl(n)
+    var expandQueue = rootNames
     var firstCheck = true
     while expandQueue.len > 0:
       var nextNames = initHashSet[string]()
@@ -408,6 +457,11 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         let versions =
           if isDevMeta: cfg.discoverVersions(name, "", refresh)
           else: cfg.cachedVersions(name)
+        if isDevMeta and name notin registered:
+          # Develop checkouts never reach `discoverVersionsBatch` (it answers
+          # them straight from the live manifest), so register them here or the
+          # resolver reports them as unknown.
+          registerVersions(name, versions)
         let ver = if versions.len > 0: $versions[0].version else: "0.0.0"
         let depsUrl = if isDevMeta: "" else: meta.url
         for d in cfg.getDeps(name, ver, @[], refresh, depsUrl):
@@ -523,7 +577,7 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         else:
           result.add(Dependency(name: dn, constraint: d.constraint, features: d.features))
 
-    let roots = @[Dependency(name: curName, constraint: rootConstraint, features: features)]
+    let roots = resolveRoots
 
     var resolution: Resolution
     try:
@@ -575,7 +629,11 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         verStrs[rp.name] = $rp.version
     cfg.logDebug("resolved " & $resolution.packages.len & " package(s)")
     var depsOnlyDirect: seq[string] = @[]
-    if depsOnly:
+    if closureMode:
+      # The caller's direct deps are the record roots, so the closure survives
+      # the prune sweep at the end of this pass.
+      depsOnlyDirect = rootNames
+    elif depsOnly:
       # The loops below run in install (leaf-first) order, so the root's own
       # iteration may come last — resolve its direct deps up front. They
       # become roots so the installed closure survives pruning.
@@ -623,7 +681,14 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
               dep.name & " " & $dep.constraint)
         path.excl(name)
       var path = initHashSet[string]()
-      renderDepTree(curName, "  ", false, true, path)
+      if closureMode:
+        # The root package is a label only and is not part of the resolution,
+        # so each direct dep becomes its own top-level entry.
+        for r in directRoots:
+          if r.name in name2ver:
+            renderDepTree(r.name, "  ", false, true, path)
+      else:
+        renderDepTree(curName, "  ", false, true, path)
 
     for sv in resolution.softViolations:
       var msg = sv.name & " resolved to " & $sv.chosen &
@@ -710,7 +775,6 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
           except: discard
       if not gotManifest:
         let fallback = cacheDir / cfg.manifestNameForPkg(rp.name)
-        echo fallback
         var hasFall = false
         try: hasFall = cfg.driver.exists(relativePath(fallback, cfg.rootPath))
         except: hasFall = fileExists(fallback)
@@ -784,7 +848,8 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         else:
           # fallback: use getDeps version as-is if unknown (should be rare)
           deps.add((dn, ""))
-      var isRoot = isRecordRoot(rp.name, curName, depsOnly, depsOnlyDirect)
+      var isRoot = isRecordRoot(rp.name, curName, depsOnly or closureMode,
+        depsOnlyDirect)
       if rp.name in tagless and verStr == "HEAD":
         # Tagless packages have no real versions: any non-HEAD row for this
         # name is stale manifest-version junk from before the HEAD
@@ -816,12 +881,12 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
           cfg.callbacks.log(lvlInfo, "  " & lbl)
         try: flushFile(stdout) except: discard
         cfg.logSuccess("Installed " & $installedCount & " " & pluralize(installedCount, "package"))
-      elif depsOnly:
+      elif depsOnly and not closureMode:
         cfg.logInfo(curName & " has no dependencies to install")
 
     cfg.pruneOrphans(verbose)
 
-    if doBuild and buildHook != nil and not depsOnly:
+    if doBuild and buildHook != nil and not depsOnly and not closureMode:
       if not buildHook(curName, rootMeta.refStr, backend):
         return false
     return true

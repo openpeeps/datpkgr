@@ -4,7 +4,7 @@
 #          Made by Humans from OpenPeeps
 #          https://github.com/openpeeps/datpkgr
 
-import std/[os, strutils, tables, sets, sequtils, json, times, options]
+import std/[os, strutils, tables, sets, sequtils, json, times, options, terminal]
 import pkg/semver
 import pkg/flysystem
 import pkg/boogie/stores/rdbms
@@ -127,6 +127,71 @@ type
     path*: string
     root*: bool
 
+  InstalledSnapshot* = object
+    ## The whole installed manifest read in a single table scan and DB scope.
+    ## Prefer this over per-name lookups whenever more than a package or two is
+    ## needed; see `installedSnapshot`.
+    records*: Table[string, seq[InstalledRecord]]
+    depsOf*: Table[string, seq[string]]
+      ## Package name -> dependency names recorded on its rows (deduped).
+    depsOfRec*: Table[string, seq[tuple[name, version: string]]]
+      ## "name@version" -> that row's dependency edges, versions unexpanded.
+      ## `pruneOrphans` qualifies these with the install graph; `depsOf` is
+      ## the name-only view used for closure walks.
+    featuresOf*: Table[string, seq[string]]
+      ## Package name -> union of the features its rows were installed with.
+    roots*: seq[string]
+      ## "name@version" keys of rows flagged `root`, in table order. Versioned
+      ## (not bare names) so a prune seed identifies exactly one install.
+
+proc installedSnapshot*(cfg: DatpkgrConfig): InstalledSnapshot =
+  ## Read the entire installed manifest once.
+  ##
+  ## Every per-name accessor opens the stores (taking an exclusive cross-process
+  ## lock, replaying the WAL) and fsyncs them again on close, so a project with
+  ## n dependencies that is inspected per name costs n store open/close cycles
+  ## — the dominant cost of an install. One scan here, shared by the closure
+  ## walk, the feature map, the root list and the prune sweep.
+  ##
+  ## Also reads each row's `deps`/`features` JSON once, instead of
+  ## deserialising the column (`jsonVal`) and re-parsing it (`parseJson`) as the
+  ## per-row consumers used to.
+  cfg.withDatpkgrDB do:
+    let tbl = cfg.stores.db.getTable("installed").get()
+    for (pk, row) in tbl.allRows():
+      let name = row["name"].strVal
+      if name.len == 0: continue
+      if not result.records.hasKey(name):
+        result.records[name] = @[]
+        result.depsOf[name] = @[]
+        result.featuresOf[name] = @[]
+        result.depsOfRec[name & "@" & row["version"].strVal] = @[]
+      result.records[name].add(InstalledRecord(
+        version: row["version"].strVal,
+        path: row["path"].strVal,
+        root: row.hasKey("root") and row["root"].boolVal
+      ))
+      if row.hasKey("root") and row["root"].boolVal:
+        result.roots.add(name & "@" & row["version"].strVal)
+      try:
+        for dep in parseJson(row["deps"].jsonVal):
+          let dn = dep["name"].getStr
+          let dv = dep["version"].getStr
+          if dn.len == 0: continue
+          if dn notin result.depsOf[name]:
+            result.depsOf[name].add(dn)
+          result.depsOfRec[name & "@" & row["version"].strVal].add((dn, dv))
+      except CatchableError:
+        discard
+      try:
+        if row.hasKey("features"):
+          for f in parseJson(row["features"].jsonVal):
+            let fs = f.getStr
+            if fs.len > 0 and fs notin result.featuresOf[name]:
+              result.featuresOf[name].add(fs)
+      except CatchableError:
+        discard
+
 proc installedRecords*(cfg: DatpkgrConfig, name: string): seq[InstalledRecord] =
   ## All installed records for `name` from the installed manifest. This is the
   ## source of truth for uninstall/prune — records can exist without any files
@@ -135,6 +200,24 @@ proc installedRecords*(cfg: DatpkgrConfig, name: string): seq[InstalledRecord] =
     let tbl = cfg.stores.db.getTable("installed").get()
     for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():
       result.add(InstalledRecord(
+        version: row["version"].strVal,
+        path: row["path"].strVal,
+        root: row.hasKey("root") and row["root"].boolVal
+      ))
+
+proc installedRecordsAll*(cfg: DatpkgrConfig): Table[string, seq[InstalledRecord]] =
+  ## Every installed record, keyed by package name, in one table scan and one
+  ## DB scope. Callers that need many packages (a dependency closure walk, a
+  ## reuse check over a project's whole manifest) must take one snapshot and
+  ## read from it: `installedRecords` per name re-opens the store, replays the
+  ## WAL and fsyncs on close, which dominates an install once a project has
+  ## more than a handful of dependencies.
+  cfg.withDatpkgrDB do:
+    let tbl = cfg.stores.db.getTable("installed").get()
+    for (pk, row) in tbl.allRows():
+      let name = row["name"].strVal
+      if name.len == 0: continue
+      result[name].add(InstalledRecord(
         version: row["version"].strVal,
         path: row["path"].strVal,
         root: row.hasKey("root") and row["root"].boolVal
@@ -150,11 +233,9 @@ proc isDevInstall*(cfg: DatpkgrConfig, rec: InstalledRecord): bool =
 proc installedRoots*(cfg: DatpkgrConfig): seq[string] =
   ## Names of every installed root package (top-level `clue install`s), in
   ## insertion order. Used by `clue update` with no argument.
-  cfg.withDatpkgrDB do:
-    let tbl = cfg.stores.db.getTable("installed").get()
-    for (pk, row) in tbl.allRows():
-      if row.hasKey("root") and row["root"].boolVal:
-        result.add(row["name"].strVal)
+  for key in cfg.installedSnapshot().roots:
+    let atPos = key.rfind('@')
+    if atPos > 0: result.add(key[0 ..< atPos]) else: result.add(key)
 
 var warnedDevShadows = initHashSet[string]()
 var devShadowWarningsEnabled* = false
@@ -167,8 +248,10 @@ var devShadowNotesOnly* = false
   ## prints itself. `clue build --verbose` uses this to render one warning per
   ## dependency rather than two.
 
-var devShadowNotes* = initTable[string, string]()
-  ## Package name -> shadow detail, populated while `devShadowNotesOnly`.
+var devShadowNotes* = initTable[string, LogSpan]()
+  ## Package name -> shadow detail slice, populated while `devShadowNotesOnly`.
+  ## The detail is a slice rather than plain text so the host can render it in
+  ## the color this kit picked.
 
 proc warnDevShadow(cfg: DatpkgrConfig, name, chosenPath: string) =
   ## Warn when a build resolves `name` to its develop-mode source (a path
@@ -216,31 +299,18 @@ proc warnDevShadow(cfg: DatpkgrConfig, name, chosenPath: string) =
     if devShadowNotesOnly:
       # The caller already printed "dep <name> → <path>", so the live source
       # needs no path of its own on this line.
-      devShadowNotes[name] = detail
+      devShadowNotes[name] = (fg: fgCyan, bg: bgDefault, text: detail)
     else:
-      cfg.logWarn(name & ": " & detail & " — building against live source (" &
-        chosenPath & ")")
+      cfg.logWarn((fg: fgDefault, bg: bgDefault, text: name & ": "),
+        (fg: fgCyan, bg: bgDefault, text: detail),
+        (fg: fgDefault, bg: bgDefault,
+          text: " — building against live source (" & chosenPath & ")"))
 
 proc collectInstalledDepNames*(cfg: DatpkgrConfig, rootNames: seq[string]): seq[string] =
   ## BFS over the installed manifest graph to collect every reachable
   ## dependency name, so the compiler gets `--path` for the whole tree.
-  var depsOf: Table[string, seq[string]]
-  cfg.withDatpkgrDB do:
-    let tbl = cfg.stores.db.getTable("installed").get()
-    for (pk, row) in tbl.allRows():
-      let name = row["name"].strVal
-      var deps: seq[string]
-      try:
-        for dep in parseJson(row["deps"].jsonVal):
-          deps.add(dep["name"].getStr)
-      except CatchableError:
-        discard
-      if deps.len == 0: continue
-      if not depsOf.hasKey(name):
-        depsOf[name] = @[]
-      for d in deps:
-        if d notin depsOf[name]:
-          depsOf[name].add(d)
+  ## Returns the whole reachable set for *all* `rootNames` in one pass.
+  let depsOf = cfg.installedSnapshot().depsOf
   var visited = initHashSet[string]()
   var queue = rootNames
   while queue.len > 0:
@@ -465,20 +535,7 @@ proc installedFeatures*(cfg: DatpkgrConfig, ): Table[string, seq[string]] =
   ## Map of installed package name -> the features it was resolved with.
   ## Features are unioned across the package's install records (a develop-mode
   ## record has none, so it must not hide a registry record's features).
-  cfg.withDatpkgrDB do:
-    let tbl = cfg.stores.db.getTable("installed").get()
-    for (pk, row) in tbl.allRows():
-      let name = row["name"].strVal
-      if not result.hasKey(name):
-        result[name] = @[]
-      try:
-        if row.hasKey("features"):
-          for f in parseJson(row["features"].jsonVal):
-            if f.getStr notin result[name]:
-              result[name].add(f.getStr)
-      except CatchableError:
-        discard
-  result
+  cfg.installedSnapshot().featuresOf
 
 proc unrecordInstall*(cfg: DatpkgrConfig, name, version: string) =
   ## Remove an installed record (dirs removed separately by the caller).
@@ -492,135 +549,137 @@ proc unrecordInstall*(cfg: DatpkgrConfig, name, version: string) =
 proc pruneOrphans*(cfg: DatpkgrConfig, verbose = true) =
   ## Remove installed packages that are no longer reachable from any root,
   ## or whose resolved version no longer matches the current dependency graph.
-  cfg.withDatpkgrDB do:
-    let tbl = cfg.stores.db.getTable("installed").get()
-
-    var depsOf: Table[string, seq[string]]  # "name@ver" -> deps
-    var installed: seq[(string, string)]    # (name, ver)
-    var installedByName: Table[string, seq[string]] # name -> versions
-    var explicitRoots: HashSet[string]      # name@ver the user installed directly
-    # first pass: collect installed + roots
-    for (pk, row) in tbl.allRows():
-      let name = row["name"].strVal
-      let ver = row["version"].strVal
-      installed.add((name, ver))
+  ## Reads the manifest through one snapshot (a single table scan) and only
+  ## opens the store again to delete the orphans it decides on.
+  let snap = cfg.installedSnapshot()
+  let explicitRoots: HashSet[string] = snap.roots.toHashSet()
+  var installed: seq[(string, string)]              # (name, ver), table order
+  var installedByName: Table[string, seq[string]]  # name -> versions
+  for name, recs in snap.records:
+    for rec in recs:
+      installed.add((name, rec.version))
       if not installedByName.hasKey(name):
         installedByName[name] = @[]
-      installedByName[name].add(ver)
-      if row.hasKey("root") and row["root"].boolVal:
-        explicitRoots.incl(name & "@" & ver)
-    # second pass: build deps graph with wildcard fallback for legacy empty versions
-    for (pk, row) in tbl.allRows():
-      let name = row["name"].strVal
-      let ver = row["version"].strVal
+      installedByName[name].add(rec.version)
+  # Qualify dep edges with the install graph. Second pass over the snapshot
+  # (not the table) because empty-version edges resolve via `installedByName`.
+  var depsOf: Table[string, seq[string]]  # "name@ver" -> deps
+  for name, recs in snap.records:
+    for rec in recs:
       var deps: seq[string]
-      try:
-        for dep in parseJson(row["deps"].jsonVal):
-          let dn = dep["name"].getStr
-          let dv = dep["version"].getStr
-          if dv.len == 0:
-            if installedByName.hasKey(dn) and installedByName[dn].len > 0:
-              deps.add(dn & "@" & installedByName[dn][0])
-            else:
-              deps.add(dn & "@")
+      for (dn, dv) in snap.depsOfRec.getOrDefault(name & "@" & rec.version, @[]):
+        if dv.len == 0:
+          if installedByName.hasKey(dn) and installedByName[dn].len > 0:
+            deps.add(dn & "@" & installedByName[dn][0])
           else:
-            deps.add(dn & "@" & dv)
-      except CatchableError:
-        discard
-      depsOf[name & "@" & ver] = deps
+            deps.add(dn & "@")
+        else:
+          deps.add(dn & "@" & dv)
+      depsOf[name & "@" & rec.version] = deps
+  # roots = packages the user explicitly installed (not transitive deps).
+  # Without this, orphaned transitive deps would become pseudo-roots and
+  # survive pruning after their parent is removed.
+  var roots: seq[string]
+  for key in explicitRoots:
+    roots.add(key)
 
-    # roots = packages the user explicitly installed (not transitive deps).
-    # Without this, orphaned transitive deps would become pseudo-roots and
-    # survive pruning after their parent is removed.
-    var roots: seq[string]
-    for key in explicitRoots:
-      roots.add(key)
-
-    # BFS from roots -> reachable set (with wildcard fallback for empty-version deps)
-    var reachable: HashSet[string]
-    var queue = roots
-    while queue.len > 0:
-      let key = queue.pop()
-      if key in reachable: continue
-      reachable.incl(key)
-      if depsOf.hasKey(key):
-        for d in depsOf[key]:
-          if d in reachable: continue
-          if depsOf.hasKey(d) or d in reachable:
-            queue.add(d)
-          elif d.endsWith("@"):
-            # wildcard: any installed version of that name
-            let n = d[0 ..< d.len-1]
+  # BFS from roots -> reachable set (with wildcard fallback for empty-version deps)
+  var reachable: HashSet[string]
+  var queue = roots
+  while queue.len > 0:
+    let key = queue.pop()
+    if key in reachable: continue
+    reachable.incl(key)
+    if depsOf.hasKey(key):
+      for d in depsOf[key]:
+        if d in reachable: continue
+        if depsOf.hasKey(d) or d in reachable:
+          queue.add(d)
+        elif d.endsWith("@"):
+          # wildcard: any installed version of that name
+          let n = d[0 ..< d.len-1]
+          if installedByName.hasKey(n):
+            for v in installedByName[n]:
+              let cand = n & "@" & v
+              if cand notin reachable:
+                queue.add(cand)
+        else:
+          # exact miss: try name fallback if version mismatch (e.g. HEAD vs semver)
+          let atPos = d.rfind('@')
+          if atPos >= 0:
+            let n = d[0 ..< atPos]
             if installedByName.hasKey(n):
+              var foundExact = false
               for v in installedByName[n]:
-                let cand = n & "@" & v
-                if cand notin reachable:
-                  queue.add(cand)
-          else:
-            # exact miss: try name fallback if version mismatch (e.g. HEAD vs semver)
-            let atPos = d.rfind('@')
-            if atPos >= 0:
-              let n = d[0 ..< atPos]
-              if installedByName.hasKey(n):
-                var foundExact = false
+                if n & "@" & v == d:
+                  foundExact = true
+                  break
+              if not foundExact and installedByName[n].len > 0:
+                # fallback to any installed version of that name
                 for v in installedByName[n]:
-                  if n & "@" & v == d:
-                    foundExact = true
-                    break
-                if not foundExact and installedByName[n].len > 0:
-                  # fallback to any installed version of that name
-                  for v in installedByName[n]:
-                    let cand = n & "@" & v
-                    if cand notin reachable:
-                      queue.add(cand)
-                  continue
-            queue.add(d)
+                  let cand = n & "@" & v
+                  if cand notin reachable:
+                    queue.add(cand)
+                continue
+          queue.add(d)
 
-    var removed = 0
-    for (name, ver) in installed:
-      let key = name & "@" & ver
-      if key in reachable: continue
-      # also consider reachable by name fallback (legacy empty deps may have added wildcard)
-      var isReachableByName = false
-      if installedByName.hasKey(name):
-        for v in installedByName[name]:
-          if (name & "@" & v) in reachable:
-            isReachableByName = true
-            break
-      if isReachableByName: continue
-      let dir = cfg.pkgsPath() / name / ver
-      cfg.safeRemoveDir(dir)
-      let parentDir = cfg.pkgsPath() / name
-      let relParent = relativePath(parentDir, cfg.rootPath)
-      var hasParent = false
-      try: hasParent = cfg.driver.exists(relParent)
-      except: hasParent = dirExists(parentDir)
-      if hasParent:
-        var hasEntries = false
-        try:
-          for meta in cfg.driver.list(relParent):
-            hasEntries = true
-            break
-        except:
-          for e in walkDir(parentDir):
-            hasEntries = true
-            break
-        if not hasEntries:
-          cfg.safeRemoveDir(parentDir)
-      for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():
-        if row["version"].strVal == ver:
-          discard cfg.stores.db.deleteRow("installed", pk)
-          inc removed
-          if verbose:
-            cfg.logInfo("  removed " & name & "@" & ver)
+  # Collect the orphans first, then reopen the store once to drop their rows.
+  # Filesystem removal stays outside the DB scope so other processes can use
+  # the databases while it runs.
+  var orphans: seq[(string, string)]  # (name, ver)
+  for (name, ver) in installed:
+    let key = name & "@" & ver
+    if key in reachable: continue
+    # also consider reachable by name fallback (legacy empty deps may have added wildcard)
+    var isReachableByName = false
+    if installedByName.hasKey(name):
+      for v in installedByName[name]:
+        if (name & "@" & v) in reachable:
+          isReachableByName = true
           break
+    if isReachableByName: continue
+    orphans.add((name, ver))
+
+  for (name, ver) in orphans:
+    let dir = cfg.pkgsPath() / name / ver
+    cfg.safeRemoveDir(dir)
+    let parentDir = cfg.pkgsPath() / name
+    let relParent = relativePath(parentDir, cfg.rootPath)
+    var hasParent = false
+    try: hasParent = cfg.driver.exists(relParent)
+    except: hasParent = dirExists(parentDir)
+    if hasParent:
+      var hasEntries = false
+      try:
+        for meta in cfg.driver.list(relParent):
+          hasEntries = true
+          break
+      except:
+        for e in walkDir(parentDir):
+          hasEntries = true
+          break
+      if not hasEntries:
+        cfg.safeRemoveDir(parentDir)
+
+  if orphans.len > 0:
+    var removed = 0
+    cfg.withDatpkgrDB do:
+      let tbl = cfg.stores.db.getTable("installed").get()
+      for (name, ver) in orphans:
+        for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():
+          if row["version"].strVal == ver:
+            discard cfg.stores.db.deleteRow("installed", pk)
+            inc removed
+            if verbose:
+              cfg.logInfo("  removed " & name & "@" & ver)
+            break
     if removed > 0:
-      cfg.stores.db.checkpoint()
       if verbose:
         cfg.logInfo("Pruned " & $removed & " orphaned package(s)")
-    else:
-      if verbose:
-        cfg.logInfo("No orphaned packages to prune")
+    elif verbose:
+      cfg.logInfo("No orphaned packages to prune")
+  elif verbose:
+    cfg.logInfo("No orphaned packages to prune")
 
 proc installedCount*(cfg: DatpkgrConfig, ): int =
   cfg.withDatpkgrDB do:

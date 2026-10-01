@@ -422,6 +422,28 @@ proc installedVersionsForReuse*(cfg: DatpkgrConfig, name: string): seq[Discovere
       discard
   result.sort(proc(a, b: DiscoveredVersion): int = cmp(b.version, a.version))
 
+proc isTaglessCached*(cfg: DatpkgrConfig, name: string): bool =
+  ## True when `name` is already installed under the `HEAD` version and its
+  ## cache clone is on disk. That pair *is* the discovery answer for a tagless
+  ## repo: no semver tags to find, nothing to fetch. Reporting this instead of
+  ## re-deriving it keeps the versions DB honest too — an empty version list
+  ## cannot be cached (there would be no row to store), so without this check
+  ## every install re-walks the ref store and rewrites an empty cache entry.
+  ## Only consulted when `refresh` is false, so newly pushed tags are still
+  ## picked up by an explicit refresh.
+  if cfg.isDevelopAvailable(name):
+    return false
+  let dest = cfg.pkgsCachePath() / name
+  var hasClone = false
+  try: hasClone = cfg.driver.exists(relativePath(dest, cfg.rootPath))
+  except: hasClone = dirExists(dest)
+  if not hasClone:
+    return false
+  for rec in cfg.installedRecords(name):
+    if rec.version == "HEAD":
+      return true
+  false
+
 proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh = false,
     onDone: proc(name: string, versions: int, cached: bool) = nil):
     Table[string, seq[DiscoveredVersion]] =
@@ -457,6 +479,13 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
         if onDone != nil:
           onDone(pkg.name, cached.len, true)
         continue
+      # Tagless repo, already installed and cloned: the answer is "no versions"
+      # and proving it costs nothing. Answering here keeps it off the pool.
+      if cfg.isTaglessCached(pkg.name):
+        result[pkg.name] = @[]
+        if onDone != nil:
+          onDone(pkg.name, 0, true)
+        continue
     toFetch.add(pkg)
   if toFetch.len > 0:
     var jobs: seq[TagFetchJob]
@@ -464,8 +493,9 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
     # Clones already on disk are served locally with no network (clone is
     # skipped and no fetch runs unless `refresh`) — report those as cached
     # so progress shows `(cached)` instead of `fetched ... using HEAD`.
-    # Tagless (HEAD) packages always land here because empty version lists
-    # are not representable in the DB/installed caches.
+    # Tagless (HEAD) packages reach here only when they are *not* already
+    # proven local (`isTaglessCached`), since empty version lists cannot be
+    # stored in the DB/installed caches.
     var preExisted = initHashSet[string]()
     for pkg in toFetch:
       if pkg.name in seenJobs:
