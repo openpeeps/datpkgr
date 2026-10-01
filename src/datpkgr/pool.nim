@@ -6,18 +6,6 @@
 #
 # Bounded worker pool used only by the install path (version discovery,
 # file install, multi-root updates). Workers are plain `{.gcsafe.}` procs.
-#
-# Threading contract (Windows SIGSEGV on fresh installs): worker → main
-# payloads must be PLAIN DATA (ints/bools) — never strings, seqs, or any
-# other GC refs. The channel moves the sender-side copy away, so the
-# worker's own GC frees those cells during a later job's churn while the
-# main thread still reads them post-join (nil read in dealloc). Display
-# strings are resolved main-side from the caller's own jobs via `idx`.
-# Jobs (main → worker) may carry strings: the caller holds its `jobs` seq
-# alive across the join and the main thread performs no GC-triggering
-# allocation while blocked in it, so workers always read them intact.
-# Progress events are replayed on the caller's thread AFTER the join
-# (post-await drain), so host display code always runs single-threaded.
 
 import pkg/threading/channels
 import std/isolation
@@ -47,16 +35,15 @@ proc poolSizeFor*(nJobs: int): int =
     cpus = 1
   max(1, min(nJobs, cpus))
 
-proc runPool*[J, R](jobs: seq[J],
-    worker: proc(job: J, progress: Chan[ProgressEvent]): R {.gcsafe.}):
+proc runPoolStreaming*[J, R](jobs: seq[J],
+    worker: proc(job: J, progress: Chan[ProgressEvent]): R {.gcsafe.},
+    onResult: proc(idx: int, res: R)):
     tuple[results: seq[R], progress: seq[ProgressEvent]] =
-  ## Runs `worker` over `jobs` on a bounded std-thread pool and joins.
-  ## Results come back in input order; progress events come back in channel
-  ## (FIFO send) order for the caller to replay on its own thread, resolving
-  ## display strings from its own `jobs` via `ProgressEvent.idx`.
-  ## Workers must be total (never raise): every fallible operation maps to
-  ## a failure value of `R`, since a dead worker would stall the drain.
-  ## `R` must be plain data (ints/bools) — see the threading contract above.
+  ## Like `runPool`, but `onResult` fires on the calling thread as each result
+  ## arrives rather than all at once after the join, so a long run reports
+  ## progress instead of going quiet. Everything else is identical — in
+  ## particular `onResult` is still single-threaded and may touch the display,
+  ## and progress events are still drained on this thread.
   result.results = @[]
   result.progress = @[]
   if jobs.len == 0:
@@ -91,10 +78,23 @@ proc runPool*[J, R](jobs: seq[J],
   for t in threads.mitems:
     joinThread(t)
   result.results = newSeq[R](jobs.len)
+  var ev: ProgressEvent
   for _ in 0 ..< jobs.len:
     let pr = resCh.recv()
     result.results[pr.idx] = pr.res
-  var ev: ProgressEvent
-  while progCh.tryRecv(ev):
-    result.progress.add(ev)
-    ev = ProgressEvent()
+    onResult(pr.idx, pr.res)
+    while progCh.tryRecv(ev):
+      result.progress.add(ev)
+      ev = ProgressEvent()
+
+proc runPool*[J, R](jobs: seq[J],
+    worker: proc(job: J, progress: Chan[ProgressEvent]): R {.gcsafe.}):
+    tuple[results: seq[R], progress: seq[ProgressEvent]] =
+  ## Runs `worker` over `jobs` on a bounded std-thread pool and joins.
+  ## Results come back in input order; progress events come back in channel
+  ## (FIFO send) order for the caller to replay on its own thread, resolving
+  ## display strings from its own `jobs` via `ProgressEvent.idx`.
+  ## Workers must be total (never raise): every fallible operation maps to
+  ## a failure value of `R`, since a dead worker would stall the drain.
+  ## `R` must be plain data (ints/bools) — see the threading contract above.
+  runPoolStreaming(jobs, worker, proc (idx: int, res: R) = discard)
