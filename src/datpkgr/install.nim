@@ -69,17 +69,13 @@ proc developRecordPath*(cfg: DatpkgrConfig, name: string): string =
     return p
   ""
 
-proc pathOnDisk(p: string): bool =
-  ## A recorded install path is only usable while its directory is still there.
-  ## Rows outlive the files they point at (`clue prune`, a manual `rm -rf`, a
-  ## moved checkout), and returning such a path would make callers believe the
-  ## package is installed — silently emitting a dead `--path` forever.
-  p.len > 0 and dirExists(p)
-
 proc resolveInstalledPath*(cfg: DatpkgrConfig, name, preferRef: string): string =
   ## The recorded `--path` for an installed package, preferring the explicit ref
-  ## (branch/tag) when given, else the latest semver version. Only records whose
-  ## path still exists on disk are considered.
+  ## (branch/tag) when given, else the latest semver version.
+  ## This is a pure lookup of what the manifest recorded: a row whose directory
+  ## was removed behind our back (a `prune`, a manual `rm -rf`, a moved
+  ## checkout) still resolves here. Callers that care must check the path
+  ## themselves — `clue` does, before treating a dependency as usable.
   ## A develop-mode checkout always wins unpinned lookups: an explicit editable
   ## source beats version ordering. An explicit `preferRef` pin is still honored
   ## when it names a registry version the develop checkout does not satisfy.
@@ -100,8 +96,6 @@ proc resolveInstalledPath*(cfg: DatpkgrConfig, name, preferRef: string): string 
       var bestVer = newVersion(0, 0, 0)
       for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():
         let p = row["path"].strVal
-        if not pathOnDisk(p):
-          continue
         let ver = row["version"].strVal
         if ver.len > 0 and ver == preferRef:
           chosen = p
