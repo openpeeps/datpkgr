@@ -69,9 +69,17 @@ proc developRecordPath*(cfg: DatpkgrConfig, name: string): string =
     return p
   ""
 
+proc pathOnDisk(p: string): bool =
+  ## A recorded install path is only usable while its directory is still there.
+  ## Rows outlive the files they point at (`clue prune`, a manual `rm -rf`, a
+  ## moved checkout), and returning such a path would make callers believe the
+  ## package is installed — silently emitting a dead `--path` forever.
+  p.len > 0 and dirExists(p)
+
 proc resolveInstalledPath*(cfg: DatpkgrConfig, name, preferRef: string): string =
   ## The recorded `--path` for an installed package, preferring the explicit ref
-  ## (branch/tag) when given, else the latest semver version.
+  ## (branch/tag) when given, else the latest semver version. Only records whose
+  ## path still exists on disk are considered.
   ## A develop-mode checkout always wins unpinned lookups: an explicit editable
   ## source beats version ordering. An explicit `preferRef` pin is still honored
   ## when it names a registry version the develop checkout does not satisfy.
@@ -91,20 +99,23 @@ proc resolveInstalledPath*(cfg: DatpkgrConfig, name, preferRef: string): string 
     else:
       var bestVer = newVersion(0, 0, 0)
       for (pk, row) in tbl.where("name", newTextValue(name)).toSeq():
+        let p = row["path"].strVal
+        if not pathOnDisk(p):
+          continue
         let ver = row["version"].strVal
         if ver.len > 0 and ver == preferRef:
-          chosen = row["path"].strVal
+          chosen = p
           break
         try:
           let v = parseVersion(ver)
           if v > bestVer:
             bestVer = v
-            chosen = row["path"].strVal
+            chosen = p
         except CatchableError:
           # Non-semver version (e.g. git ref like "head") — use as fallback
           # when no semver match has been found yet.
           if chosen.len == 0:
-            chosen = row["path"].strVal
+            chosen = p
   if chosen.len > 0:
     cfg.warnDevShadow(name, chosen)
     return chosen
@@ -150,6 +161,15 @@ var devShadowWarningsEnabled* = false
   ## Build commands enable this when `--verbose` is passed; the shadow warning
   ## would otherwise interleave with the live spinner line on a plain build.
 
+var devShadowNotesOnly* = false
+  ## When set, `warnDevShadow` records its message in `devShadowNotes` instead
+  ## of printing it, so the caller can attach the detail to a warning line it
+  ## prints itself. `clue build --verbose` uses this to render one warning per
+  ## dependency rather than two.
+
+var devShadowNotes* = initTable[string, string]()
+  ## Package name -> shadow detail, populated while `devShadowNotesOnly`.
+
 proc warnDevShadow(cfg: DatpkgrConfig, name, chosenPath: string) =
   ## Warn when a build resolves `name` to its develop-mode source (a path
   ## outside the package registry) while a registry version is also installed —
@@ -191,9 +211,15 @@ proc warnDevShadow(cfg: DatpkgrConfig, name, chosenPath: string) =
   if registryVer.len > 0:
     warnedDevShadows.incl(name)
     let dev = if devVer.len > 0: devVer else: "?"
-    cfg.logWarn(name & ": using devel source " & dev &
-      " that shadows installed version " & registryVer &
-      " — building against live source (" & chosenPath & ")")
+    let detail = "Using devel source " & dev &
+      " that shadows installed version " & registryVer
+    if devShadowNotesOnly:
+      # The caller already printed "dep <name> → <path>", so the live source
+      # needs no path of its own on this line.
+      devShadowNotes[name] = detail
+    else:
+      cfg.logWarn(name & ": " & detail & " — building against live source (" &
+        chosenPath & ")")
 
 proc collectInstalledDepNames*(cfg: DatpkgrConfig, rootNames: seq[string]): seq[string] =
   ## BFS over the installed manifest graph to collect every reachable
