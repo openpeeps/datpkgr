@@ -729,6 +729,33 @@ proc readManifestContent*(cfg: DatpkgrConfig, dest, name, version: string): stri
 proc readManifestContentGeneric*(cfg: DatpkgrConfig, dest, name, version: string): string =
   cfg.readManifestContent(dest, name, version)
 
+proc parseManifestDeps(cfg: DatpkgrConfig, content, mf: string): CachedDeps =
+  ## Split a parsed manifest into hard deps, per-feature deps and dev deps,
+  ## dropping the toolchain itself.
+  let m = cfg.parseManifest(content, mf)
+  proc isToolchainDep(d: PkgDependency): bool =
+    d.isToolchain or d.name == cfg.toolchainName
+  for dep in m.dependencies:
+    if not isToolchainDep(dep):
+      result.hard.add(dep)
+  for fname, fdeps in m.features:
+    var farr: seq[PkgDependency]
+    for dep in fdeps:
+      if not isToolchainDep(dep):
+        farr.add(dep)
+    result.features[fname] = farr
+  for dep in m.devDependencies:
+    if not isToolchainDep(dep):
+      result.dev.add(dep)
+
+proc applyFeatures(cfg: DatpkgrConfig, deps: CachedDeps,
+    features: seq[string]): seq[PkgDependency] =
+  result = deps.hard
+  for f in features:
+    if deps.features.hasKey(f):
+      for dep in deps.features[f]:
+        result.add(dep)
+
 proc getDeps*(cfg: DatpkgrConfig, name, version: string, features: seq[string] = @[],
     refresh = false, url = ""): seq[PkgDependency] =
   ## Lazily fetch the dependency list for a specific package version,
@@ -739,6 +766,31 @@ proc getDeps*(cfg: DatpkgrConfig, name, version: string, features: seq[string] =
   ## `cfg.manifestParser`, so the entry file is fully pluggable.
   cfg.debugLog("deps: " & name & "@" & version & (if url.len > 0: " <- " & url else: ""))
   result = @[]
+
+  # A develop checkout is the authority for its own deps, so its manifest is
+  # read live on every call. This has to come before the deps cache and the
+  # `_cache` clone: that clone is an older commit and the deps cache is keyed
+  # by (name, version), so both go stale the moment the user edits their
+  # nimble file. A stale list does not fail loudly — the new `requires` are
+  # simply absent, the closure is built without them, and the build dies later
+  # on a module it cannot find.
+  if cfg.isDevelopAvailable(name):
+    let devPath = cfg.developPath() / name
+    var realDev = devPath
+    try: realDev = expandSymlink(devPath)
+    except: discard
+    var mf = cfg.findManifestInDir(realDev)
+    if mf.len == 0: mf = cfg.findManifestForDir(realDev)
+    if mf.len == 0: mf = cfg.findManifestInDir(devPath)
+    if mf.len == 0:
+      cfg.logWarn("No manifest in the develop checkout for " & name)
+      return @[]
+    try:
+      return cfg.applyFeatures(cfg.parseManifestDeps(readFile(mf), mf), features)
+    except CatchableError as e:
+      cfg.logWarn("Failed to read " & mf & ": " & e.msg)
+      return @[]
+
   var cached: Option[CachedDeps]
   if not refresh:
     cached = cfg.readCachedDeps(name, version)
@@ -763,42 +815,6 @@ proc getDeps*(cfg: DatpkgrConfig, name, version: string, features: seq[string] =
         if meta.isSome:
           pkgUrl = meta.get().url
       if pkgUrl.len == 0:
-        if cfg.isDevelopAvailable(name):
-          let devPath = cfg.developPath() / name
-          var realDev = devPath
-          try: realDev = expandSymlink(devPath)
-          except: discard
-          var mf = cfg.findManifestInDir(realDev)
-          if mf.len == 0:
-            mf = cfg.findManifestForDir(realDev)
-          if mf.len == 0:
-            mf = cfg.findManifestInDir(devPath)
-          if mf.len > 0:
-            try:
-              let content = readFile(mf)
-              let m = cfg.parseManifest(content, mf)
-              proc isToolchainDep2(d: PkgDependency): bool =
-                d.isToolchain or d.name == cfg.toolchainName
-              for dep in m.dependencies:
-                if not isToolchainDep2(dep):
-                  deps.hard.add(dep)
-              for fname, fdeps in m.features:
-                var farr: seq[PkgDependency]
-                for dep in fdeps:
-                  if not isToolchainDep2(dep):
-                    farr.add(dep)
-                deps.features[fname] = farr
-              for dep in m.devDependencies:
-                if not isToolchainDep2(dep):
-                  deps.dev.add(dep)
-              cfg.cacheDeps(name, version, deps)
-            except: discard
-            result = deps.hard
-            for f in features:
-              if deps.features.hasKey(f):
-                for dep in deps.features[f]:
-                  result.add(dep)
-            return result
         cfg.logWarn("Unknown package in registry: " & name)
         return @[]
       if not cfg.clonePackage(pkgUrl, dest, refresh):
@@ -809,28 +825,10 @@ proc getDeps*(cfg: DatpkgrConfig, name, version: string, features: seq[string] =
 
     let manifestContent = cfg.readManifestContent(dest, name, version)
     if manifestContent.len > 0:
-      let m = cfg.parseManifest(manifestContent, cfg.manifestNameForPkg(name))
-      proc isToolchainDep(d: PkgDependency): bool =
-        d.isToolchain or d.name == cfg.toolchainName
-      for dep in m.dependencies:
-        if not isToolchainDep(dep):
-          deps.hard.add(dep)
-      for fname, fdeps in m.features:
-        var farr: seq[PkgDependency]
-        for dep in fdeps:
-          if not isToolchainDep(dep):
-            farr.add(dep)
-        deps.features[fname] = farr
-      for dep in m.devDependencies:
-        if not isToolchainDep(dep):
-          deps.dev.add(dep)
+      deps = cfg.parseManifestDeps(manifestContent, cfg.manifestNameForPkg(name))
       cfg.cacheDeps(name, version, deps)
 
-  result = deps.hard
-  for f in features:
-    if deps.features.hasKey(f):
-      for dep in deps.features[f]:
-        result.add(dep)
+  result = cfg.applyFeatures(deps, features)
 
 #
 # Installed manifest + pruning

@@ -155,18 +155,25 @@ proc installedSnapshot*(cfg: DatpkgrConfig): InstalledSnapshot =
     for (pk, row) in tbl.allRows():
       let name = row["name"].strVal
       if name.len == 0: continue
+      # Keyed by name@version, so it has to be seeded per *row*. Initialising
+      # it once per name left every later row's key missing, and the `[]` below
+      # raised a KeyError that the `except` swallowed along with the rest of
+      # that row's deps — so `depsOf` ended up the deps of whichever single row
+      # the table happened to yield first.
+      let key = name & "@" & row["version"].strVal
       if not result.records.hasKey(name):
         result.records[name] = @[]
         result.depsOf[name] = @[]
         result.featuresOf[name] = @[]
-        result.depsOfRec[name & "@" & row["version"].strVal] = @[]
+      if not result.depsOfRec.hasKey(key):
+        result.depsOfRec[key] = @[]
       result.records[name].add(InstalledRecord(
         version: row["version"].strVal,
         path: row["path"].strVal,
         root: row.hasKey("root") and row["root"].boolVal
       ))
       if row.hasKey("root") and row["root"].boolVal:
-        result.roots.add(name & "@" & row["version"].strVal)
+        result.roots.add(key)
       try:
         for dep in parseJson(row["deps"].jsonVal):
           let dn = dep["name"].getStr
@@ -174,7 +181,7 @@ proc installedSnapshot*(cfg: DatpkgrConfig): InstalledSnapshot =
           if dn.len == 0: continue
           if dn notin result.depsOf[name]:
             result.depsOf[name].add(dn)
-          result.depsOfRec[name & "@" & row["version"].strVal].add((dn, dv))
+          result.depsOfRec[key].add((dn, dv))
       except CatchableError:
         discard
       try:

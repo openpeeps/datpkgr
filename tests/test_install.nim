@@ -60,6 +60,31 @@ suite "install — record and query":
     check "C" in names
     check "A" in names
 
+  test "installedSnapshot unions deps across a package's versions":
+    # A package recorded at several versions must contribute *all* of their
+    # deps, not just the ones on whichever row the table yields first. The
+    # deps cache is keyed by name@version, so a missing seed there raised a
+    # KeyError that the row parser swallowed, silently dropping the rest of
+    # that row's deps — and with it, the package from every build closure.
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    cfg.recordInstall("root", "1.0.0", @[], root=true, installPath=cfg.pkgsPath()/"root"/"1.0.0")
+    cfg.recordInstall("multi", "1.0.0", @[("shared", "1.0.0")], root=false,
+      installPath=cfg.pkgsPath()/"multi"/"1.0.0")
+    cfg.recordInstall("multi", "2.0.0", @[("shared", "1.0.0"), ("added", "0.1.0")],
+      root=false, installPath=cfg.pkgsPath()/"multi"/"2.0.0")
+    let snap = cfg.installedSnapshot()
+    check "shared" in snap.depsOf["multi"]
+    check "added" in snap.depsOf["multi"]
+    check snap.depsOfRec.hasKey("multi@1.0.0")
+    check snap.depsOfRec.hasKey("multi@2.0.0")
+    check snap.depsOfRec["multi@1.0.0"].len == 1
+    check snap.depsOfRec["multi@2.0.0"].len == 2
+    let names = cfg.collectInstalledDepNames(@["root", "multi"])
+    check "shared" in names
+    check "added" in names
+
   test "installedFeatures union":
     let cfg = tempCfg()
     defer: cleanupCfg(cfg)
