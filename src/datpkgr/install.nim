@@ -307,9 +307,44 @@ proc warnDevShadow(cfg: DatpkgrConfig, name, chosenPath: string) =
         (fg: fgDefault, bg: bgDefault,
           text: " — building against live source (" & chosenPath & ")"))
 
+proc depNamesFor*(cfg: DatpkgrConfig, name: string,
+    recorded: seq[string]): seq[string] =
+  ## The dependency names to walk for `name`.
+  ##
+  ## A develop checkout is read live, because its recorded row is only a
+  ## snapshot of the manifest as of the last install. Trusting that row means
+  ## the closure is built from a dependency list the user has already edited:
+  ## a `requires` added since is simply absent, and the build goes on to fail on
+  ## a package nobody asked for — or, once a repo and its package name diverge,
+  ## to look up the repository's basename and report a package as missing while
+  ## the real one sits installed.
+  ##
+  ## Falls back to the recorded list when the checkout yields nothing, so an
+  ## unreadable manifest cannot quietly empty a closure.
+  if not cfg.isDevelopAvailable(name):
+    return recorded
+  var seen = initHashSet[string]()
+  let live = cfg.readDevelopManifest(name)
+  if live.isSome:
+    for dep in live.get().dependencies:
+      if cfg.toolchainDep(dep):
+        continue
+      var dn = dep.name
+      if dn.len == 0 and dep.url.len > 0:
+        dn = cfg.pkgNameForUrl(dep.url)
+        if dn.len == 0:
+          dn = dep.url.split('/')[^1]
+          if dn.endsWith(".git"): dn.setLen(dn.len - 4)
+      if dn.len > 0 and dn notin seen:
+        seen.incl(dn)
+        result.add(dn)
+  if result.len == 0:
+    result = recorded
+
 proc collectInstalledDepNames*(cfg: DatpkgrConfig, rootNames: seq[string]): seq[string] =
-  ## BFS over the installed manifest graph to collect every reachable
-  ## dependency name, so the compiler gets `--path` for the whole tree.
+  ## BFS over the dependency graph to collect every reachable dependency name,
+  ## so the compiler gets `--path` for the whole tree. Develop checkouts are
+  ## read live (see `depNamesFor`); everything else walks the installed rows.
   ## Returns the whole reachable set for *all* `rootNames` in one pass.
   let depsOf = cfg.installedSnapshot().depsOf
   var visited = initHashSet[string]()
@@ -319,10 +354,10 @@ proc collectInstalledDepNames*(cfg: DatpkgrConfig, rootNames: seq[string]): seq[
     if name in visited:
       continue
     visited.incl(name)
-    if depsOf.hasKey(name):
-      for d in depsOf[name]:
-        if d notin visited:
-          queue.add(d)
+    let recorded = depsOf.getOrDefault(name)
+    for d in cfg.depNamesFor(name, recorded):
+      if d notin visited:
+        queue.add(d)
   toSeq(visited)
 
 proc isInstalledOnDisk*(cfg: DatpkgrConfig, name: string): bool =

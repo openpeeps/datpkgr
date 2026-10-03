@@ -707,3 +707,69 @@ proc fetchAllPkgMetas*(cfg: DatpkgrConfig, pkgName: string): seq[PkgRef] =
   cfg.withDatpkgrDB do:
     for (_, row) in cfg.stores.db.getTable("packages").get().where("name", newTextValue(pkgName)).toSeq():
       result.add(PkgRef(name: pkgName, url: row["url"].strVal, refStr: ""))
+
+proc normalizeRepoUrl*(url: string): string =
+  ## Reduce a repository URL to a comparable key: no scheme, no `.git`, no
+  ## trailing slash, lowercased. A registry stores one canonical spelling while
+  ## a manifest may use another (`git+https://`, `ssh://`, a bare host, an
+  ## explicit `.git`), and those all name the same repository.
+  var u = url.strip()
+  for prefix in ["git+https://", "git+http://", "git+ssh://", "ssh://",
+                  "https://", "http://", "git://"]:
+    if u.toLowerAscii.startsWith(prefix):
+      u = u[prefix.len .. ^1]
+      break
+  while u.len > 0 and u[^1] == '/':
+    u.setLen(u.len - 1)
+  if u.len > 4 and u.toLowerAscii.endsWith(".git"):
+    u.setLen(u.len - 4)
+  u.toLowerAscii
+
+proc pkgNameForUrl*(cfg: DatpkgrConfig, url: string,
+    sourceFilter: string = ""): string =
+  ## The registry package name for a repository URL, or "" if the registry does
+  ## not know that URL.
+  ##
+  ## This exists because a repository and the package inside it need not share a
+  ## name: `github.com/supranim/tasks` ships `supranim_tasks.nimble`. Taking the
+  ## repository's basename as the package name gets that case wrong, and it
+  ## fails late and confusingly — the install itself succeeds under the real
+  ## name, so the caller's own dependency list is left holding a name nothing
+  ## is recorded under and it goes on to look that name up in the registry.
+  let key = normalizeRepoUrl(url)
+  if key.len == 0:
+    return ""
+  cfg.withDatpkgrDB do:
+    for (_, row) in cfg.stores.db.getTable("packages").get().allRows():
+      if normalizeRepoUrl(row["url"].strVal) != key:
+        continue
+      if sourceFilter.len > 0 and row["source"].strVal != sourceFilter:
+        continue
+      return row["name"].strVal
+  ""
+
+proc readDevelopManifest*(cfg: DatpkgrConfig, name: string): Option[Manifest] =
+  ## The develop checkout's manifest, read right now. None when there is no
+  ## checkout or its manifest cannot be read or parsed.
+  ##
+  ## Lives here because both `versions` (resolving a develop package) and
+  ## `install` (walking the closure) need it: `versions` already imports
+  ## `install`, so the reverse import would be circular.
+  let devPath = cfg.developPath() / name
+  var realDev = devPath
+  try: realDev = expandSymlink(devPath)
+  except: discard
+  var mf = cfg.findManifestInDir(realDev)
+  if mf.len == 0: mf = cfg.findManifestForDir(realDev)
+  if mf.len == 0: mf = cfg.findManifestInDir(devPath)
+  if mf.len == 0:
+    return none(Manifest)
+  try:
+    some(cfg.parseManifest(readFile(mf), mf))
+  except CatchableError as e:
+    cfg.logWarn("Failed to read " & mf & ": " & e.msg)
+    none(Manifest)
+
+proc toolchainDep*(cfg: DatpkgrConfig, d: PkgDependency): bool =
+  ## Whether `d` is the configured toolchain rather than a real dependency.
+  d.isToolchain or d.name == cfg.toolchainName

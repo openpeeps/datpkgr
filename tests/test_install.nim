@@ -1,10 +1,11 @@
-import std/[os, unittest, tables, sequtils, json, tempfiles]
+import std/[os, unittest, tables, sequtils, json, strutils, options, tempfiles]
 import pkg/semver
 import pkg/boogie/stores/rdbms
 import datpkgr/config
 import datpkgr/install
 import datpkgr/store
 import datpkgr/types
+import datpkgr/resolver
 import helpers
 
 suite "install — record and query":
@@ -84,6 +85,51 @@ suite "install — record and query":
     let names = cfg.collectInstalledDepNames(@["root", "multi"])
     check "shared" in names
     check "added" in names
+
+  test "collectInstalledDepNames follows a develop checkout's live manifest":
+    # A recorded row is only the manifest as of the last install. Walking the
+    # installed graph therefore answers with a dependency list the user has
+    # already edited: a dep added since is missing, and one removed since is
+    # still demanded. A develop checkout has to be read live instead.
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.manifestParser = proc(content, path: string): Manifest =
+      result = Manifest(path: path, name: path.extractFilename.changeFileExt(""),
+        extra: newJObject())
+      for line in content.splitLines():
+        let t = line.strip()
+        if not t.startsWith("requires"): continue
+        let open = t.find('"')
+        if open < 0: continue
+        let close = t.find('"', open + 1)
+        if close <= open: continue
+        var name = t[open+1 ..< close]
+        for sep in [' ', '@', '#']:
+          let p = name.find(sep)
+          if p >= 0: name.setLen(p)
+        if name.len > 0:
+          result.dependencies.add(
+            PkgDependency(name: name, constraint: parseConstraint(">= 0.0.0")))
+    cfg.initDatpkgr()
+    let srcDir = createTempDir("datpkgr_devsrc_", "")
+    defer:
+      cfg.safeRemoveSymlink(cfg.developPath() / "devpkg")
+      removeDir(srcDir)
+    writeFile(srcDir / "manifest.json", "requires \"liveDep\"\nrequires \"keptDep\"\n")
+    check cfg.createDevelopLink(srcDir, cfg.developPath() / "devpkg")
+    # A row recorded before the edit: it still lists a dep the manifest no
+    # longer has, and knows nothing about the one the manifest added.
+    cfg.recordInstall("devpkg", "1.0.0", @[("staleDep", "1.0.0")], root=true,
+      installPath=cfg.developPath() / "devpkg")
+    cfg.recordInstall("keptDep", "1.0.0", @[], root=false,
+      installPath=cfg.pkgsPath() / "keptDep" / "1.0.0")
+    cfg.recordInstall("staleDep", "1.0.0", @[], root=false,
+      installPath=cfg.pkgsPath() / "staleDep" / "1.0.0")
+    let names = cfg.collectInstalledDepNames(@["devpkg"])
+    check "devpkg" in names
+    check "liveDep" in names
+    check "keptDep" in names
+    check "staleDep" notin names
 
   test "installedFeatures union":
     let cfg = tempCfg()

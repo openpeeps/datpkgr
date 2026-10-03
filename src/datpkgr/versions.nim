@@ -729,23 +729,20 @@ proc readManifestContent*(cfg: DatpkgrConfig, dest, name, version: string): stri
 proc readManifestContentGeneric*(cfg: DatpkgrConfig, dest, name, version: string): string =
   cfg.readManifestContent(dest, name, version)
 
-proc parseManifestDeps(cfg: DatpkgrConfig, content, mf: string): CachedDeps =
+proc parseManifestDeps(cfg: DatpkgrConfig, m: Manifest): CachedDeps =
   ## Split a parsed manifest into hard deps, per-feature deps and dev deps,
   ## dropping the toolchain itself.
-  let m = cfg.parseManifest(content, mf)
-  proc isToolchainDep(d: PkgDependency): bool =
-    d.isToolchain or d.name == cfg.toolchainName
   for dep in m.dependencies:
-    if not isToolchainDep(dep):
+    if not cfg.toolchainDep(dep):
       result.hard.add(dep)
   for fname, fdeps in m.features:
     var farr: seq[PkgDependency]
     for dep in fdeps:
-      if not isToolchainDep(dep):
+      if not cfg.toolchainDep(dep):
         farr.add(dep)
     result.features[fname] = farr
   for dep in m.devDependencies:
-    if not isToolchainDep(dep):
+    if not cfg.toolchainDep(dep):
       result.dev.add(dep)
 
 proc applyFeatures(cfg: DatpkgrConfig, deps: CachedDeps,
@@ -775,21 +772,11 @@ proc getDeps*(cfg: DatpkgrConfig, name, version: string, features: seq[string] =
   # simply absent, the closure is built without them, and the build dies later
   # on a module it cannot find.
   if cfg.isDevelopAvailable(name):
-    let devPath = cfg.developPath() / name
-    var realDev = devPath
-    try: realDev = expandSymlink(devPath)
-    except: discard
-    var mf = cfg.findManifestInDir(realDev)
-    if mf.len == 0: mf = cfg.findManifestForDir(realDev)
-    if mf.len == 0: mf = cfg.findManifestInDir(devPath)
-    if mf.len == 0:
-      cfg.logWarn("No manifest in the develop checkout for " & name)
+    let live = cfg.readDevelopManifest(name)
+    if live.isNone:
+      cfg.logWarn("No readable manifest in the develop checkout for " & name)
       return @[]
-    try:
-      return cfg.applyFeatures(cfg.parseManifestDeps(readFile(mf), mf), features)
-    except CatchableError as e:
-      cfg.logWarn("Failed to read " & mf & ": " & e.msg)
-      return @[]
+    return cfg.applyFeatures(cfg.parseManifestDeps(live.get), features)
 
   var cached: Option[CachedDeps]
   if not refresh:
@@ -825,7 +812,8 @@ proc getDeps*(cfg: DatpkgrConfig, name, version: string, features: seq[string] =
 
     let manifestContent = cfg.readManifestContent(dest, name, version)
     if manifestContent.len > 0:
-      deps = cfg.parseManifestDeps(manifestContent, cfg.manifestNameForPkg(name))
+      deps = cfg.parseManifestDeps(
+        cfg.parseManifest(manifestContent, cfg.manifestNameForPkg(name)))
       cfg.cacheDeps(name, version, deps)
 
   result = cfg.applyFeatures(deps, features)
