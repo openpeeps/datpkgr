@@ -595,20 +595,21 @@ proc headVersion*(cfg: DatpkgrConfig, name: string): Version =
           return parseVersion(m.version)
       except CatchableError:
         discard
-  let fallbackPath = dest / cfg.manifestNameForPkg(name)
-  var hasFall = false
-  try: hasFall = cfg.driver.exists(relativePath(fallbackPath, cfg.rootPath))
-  except: hasFall = fileExists(fallbackPath)
-  if hasFall:
-    try:
-      let content =
-        try: cfg.driver.read(relativePath(fallbackPath, cfg.rootPath))
-        except: readFile(fallbackPath)
-      let m = cfg.parseManifest(content, fallbackPath)
-      if m.version.len > 0:
-        return parseVersion(m.version)
-    except CatchableError:
-      discard
+  for manifestName in cfg.manifestNameCandidates(name):
+    let fallbackPath = dest / manifestName
+    var hasFall = false
+    try: hasFall = cfg.driver.exists(relativePath(fallbackPath, cfg.rootPath))
+    except: hasFall = fileExists(fallbackPath)
+    if hasFall:
+      try:
+        let content =
+          try: cfg.driver.read(relativePath(fallbackPath, cfg.rootPath))
+          except: readFile(fallbackPath)
+        let m = cfg.parseManifest(content, fallbackPath)
+        if m.version.len > 0:
+          return parseVersion(m.version)
+      except CatchableError:
+        discard
   newVersion(0, 0, 0)
 
 const
@@ -706,8 +707,13 @@ proc defaultBranch(cfg: DatpkgrConfig, dest: string): string =
 
 proc readManifestContent*(cfg: DatpkgrConfig, dest, name, version: string): string =
   ## Read a package version's manifest file via `git show` — no working-tree
-  ## checkout. Uses `cfg.manifestNameForPkg` so the entry file is pluggable.
-  let manifestName = cfg.manifestNameForPkg(name)
+  ## checkout. Uses `cfg.manifestNameForPkg` so the entry file is pluggable,
+  ## falling back to the YAML spelling alternate (`.yml` <-> `.yaml`) so
+  ## repos using either extension resolve.
+  var manifestNames = @[cfg.manifestNameForPkg(name)]
+  let alt = alternateManifestName(manifestNames[0])
+  if alt.len > 0 and alt != manifestNames[0]:
+    manifestNames.add(alt)
   let tag =
     if version == "0.0.0": ""
     else:
@@ -716,15 +722,18 @@ proc readManifestContent*(cfg: DatpkgrConfig, dest, name, version: string): stri
         try: tagForVersion(cfg, dest, version)
         except: tagForVersion(dest, version)
       else: tagForVersion(dest, version)
-  let (output, exitCode) =
-    if version == "0.0.0" or tag.len == 0:
-      # No semver tag (tagless repo, or a headVersion fallback like 0.1.0
-      # with zero tags) — read the manifest at HEAD so deps are not dropped.
-      cfg.gitExec("git -C " & dest & " show origin/" & cfg.defaultBranch(dest) & ":" &
-        manifestName)
-    else:
-      cfg.gitExec("git -C " & dest & " show " & tag & ":" & manifestName)
-  if exitCode == 0: output else: ""
+  for manifestName in manifestNames:
+    let (output, exitCode) =
+      if version == "0.0.0" or tag.len == 0:
+        # No semver tag (tagless repo, or a headVersion fallback like 0.1.0
+        # with zero tags) — read the manifest at HEAD so deps are not dropped.
+        cfg.gitExec("git -C " & dest & " show origin/" & cfg.defaultBranch(dest) & ":" &
+          manifestName)
+      else:
+        cfg.gitExec("git -C " & dest & " show " & tag & ":" & manifestName)
+    if exitCode == 0:
+      return output
+  ""
 
 proc readManifestContentGeneric*(cfg: DatpkgrConfig, dest, name, version: string): string =
   cfg.readManifestContent(dest, name, version)

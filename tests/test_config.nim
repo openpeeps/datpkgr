@@ -138,3 +138,52 @@ suite "config — manifest finders":
       for m in captured:
         if "hello" in m: found = true
     check found
+
+suite "config — yaml manifest spelling fallback":
+  test "alternateManifestName swaps yml and yaml":
+    check alternateManifestName("tim.config.yml") == "tim.config.yaml"
+    check alternateManifestName("tim.config.yaml") == "tim.config.yml"
+    check alternateManifestName("pkg.nimble") == ""
+    check alternateManifestName("manifest.json") == ""
+    check alternateManifestName("*.nimble") == ""
+
+  test "manifestNameCandidates keeps canonical first":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.manifestFileName = proc(pkg: string): string = "tim.config.yml"
+    check cfg.manifestNameCandidates("bootstrap") == @["tim.config.yml", "tim.config.yaml"]
+    cfg.manifestFileName = proc(pkg: string): string =
+      if pkg == "*": return "*.nimble"
+      pkg & ".nimble"
+    check cfg.manifestNameCandidates() == @["*.nimble"]
+    check cfg.manifestNameCandidates("spry") == @["spry.nimble"]
+
+  test "findManifestInDir finds yaml-only checkout outside driver":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.manifestFileName = proc(pkg: string): string = "tim.config.yml"
+    let dir = getTempDir() / "datpkgr_yaml" / $getCurrentProcessId()
+    createDir(dir)
+    defer: removeDir(dir)
+    writeFile(dir / "tim.config.yaml", "name: bootstrap\nversion: 0.1.0\n")
+    check cfg.findManifestInDir(dir).extractFilename == "tim.config.yaml"
+
+  test "findManifestInDir prefers canonical yml when both exist":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.manifestFileName = proc(pkg: string): string = "tim.config.yml"
+    let dir = getTempDir() / "datpkgr_yaml_both" / $getCurrentProcessId()
+    createDir(dir)
+    defer: removeDir(dir)
+    writeFile(dir / "tim.config.yaml", "name: bootstrap\nversion: 0.1.0\n")
+    writeFile(dir / "tim.config.yml", "name: bootstrap\nversion: 0.2.0\n")
+    check cfg.findManifestInDir(dir).extractFilename == "tim.config.yml"
+
+  test "findManifestInDir finds yaml-only checkout inside driver":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.manifestFileName = proc(pkg: string): string = "tim.config.yml"
+    let dir = cfg.pkgsCachePath() / "yamlprobe"
+    createDir(dir)
+    writeFile(dir / "tim.config.yaml", "name: yamlprobe\nversion: 0.1.0\n")
+    check cfg.findManifestInDir(dir).extractFilename == "tim.config.yaml"

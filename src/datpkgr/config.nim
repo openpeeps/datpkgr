@@ -140,47 +140,72 @@ proc manifestNameForPkg*(cfg: DatpkgrConfig, pkgName: string): string =
   if cfg.manifestFileName != nil: cfg.manifestFileName(pkgName)
   else: defaultManifestFileName(pkgName)
 
+proc alternateManifestName*(name: string): string =
+  ## YAML spelling alternate for a manifest filename: `.yml` <-> `.yaml`.
+  ## Returns "" when the name uses neither extension, so non-YAML
+  ## toolchains (e.g. `pkg.nimble`, `manifest.json`) are unaffected.
+  let lower = name.toLowerAscii()
+  if lower.endsWith(".yml"):
+    result = name[0 ..< name.len-3] & "yaml"
+  elif lower.endsWith(".yaml"):
+    result = name[0 ..< name.len-4] & "yml"
+
+proc manifestNameCandidates*(cfg: DatpkgrConfig, pkgName = "*"): seq[string] =
+  ## Manifest entry filenames to try, in order: the configured name plus the
+  ## YAML spelling alternate when it differs. Lets YAML-based toolchains
+  ## consume package repos regardless of which extension they use, with the
+  ## configured (canonical) name always winning when both exist.
+  let primary = cfg.manifestNameForPkg(pkgName)
+  result = @[primary]
+  if "*" notin primary:
+    let alt = alternateManifestName(primary)
+    if alt.len > 0 and alt != primary:
+      result.add(alt)
+
 proc findManifestForDir*(cfg: DatpkgrConfig, dir: string): string =
   if cfg.manifestFinder != nil: cfg.manifestFinder(dir) else: defaultManifestFinder(dir)
 
 proc findManifestInDir*(cfg: DatpkgrConfig, dir: string): string =
   ## Only checks `dir` itself (no walk-up), used for cache/install dirs.
   ## Skips the toolchain's own entry file when `toolchainName` is configured.
+  ## Tries each name from `manifestNameCandidates` in order, so a
+  ## `tim.config.yaml` checkout is found even when the canonical name is
+  ## `tim.config.yml` (and vice versa).
   ## Uses flysystem when `dir` is inside the driver root, otherwise raw.
-  let pattern = cfg.manifestNameForPkg("*")
   let toolchainEntry =
     if cfg.toolchainName.len > 0: cfg.manifestNameForPkg(cfg.toolchainName)
     else: ""
   # Inside-driver paths use flysystem; outside (e.g. /tmp, user project) use raw
   let inside = dir.startsWith(cfg.rootPath & DirSep) or dir == cfg.rootPath
-  if inside:
-    let relDir = relativePath(dir, cfg.rootPath)
-    if "*" in pattern:
-      try:
-        let relPattern = relDir / pattern
-        for rel in cfg.driver.search(relPattern):
-          let f = cfg.rootPath / rel
+  for pattern in cfg.manifestNameCandidates():
+    if inside:
+      let relDir = relativePath(dir, cfg.rootPath)
+      if "*" in pattern:
+        try:
+          let relPattern = relDir / pattern
+          for rel in cfg.driver.search(relPattern):
+            let f = cfg.rootPath / rel
+            if toolchainEntry.len > 0 and f.extractFilename == toolchainEntry:
+              continue
+            return f
+        except CatchableError: discard
+      else:
+        let cand = dir / pattern
+        let relCand = relativePath(cand, cfg.rootPath)
+        try:
+          if cfg.driver.exists(relCand):
+            return cand
+        except CatchableError: discard
+    else:
+      if "*" in pattern:
+        for f in walkFiles(dir / pattern):
           if toolchainEntry.len > 0 and f.extractFilename == toolchainEntry:
             continue
           return f
-      except CatchableError: discard
-    else:
-      let cand = dir / pattern
-      let relCand = relativePath(cand, cfg.rootPath)
-      try:
-        if cfg.driver.exists(relCand):
+      else:
+        let cand = dir / pattern
+        if fileExists(cand):
           return cand
-      except CatchableError: discard
-  else:
-    if "*" in pattern:
-      for f in walkFiles(dir / pattern):
-        if toolchainEntry.len > 0 and f.extractFilename == toolchainEntry:
-          continue
-        return f
-    else:
-      let cand = dir / pattern
-      if fileExists(cand):
-        return cand
   ""
 
 proc parseManifest*(cfg: DatpkgrConfig, content: string, path: string): Manifest =

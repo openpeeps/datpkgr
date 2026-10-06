@@ -774,18 +774,20 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
             gotManifest = true
           except: discard
       if not gotManifest:
-        let fallback = cacheDir / cfg.manifestNameForPkg(rp.name)
-        var hasFall = false
-        try: hasFall = cfg.driver.exists(relativePath(fallback, cfg.rootPath))
-        except: hasFall = fileExists(fallback)
-        if hasFall:
-          try:
-            let content =
-              try: cfg.driver.read(relativePath(fallback, cfg.rootPath))
-              except: readFile(fallback)
-            manifest = cfg.parseManifest(content, fallback)
-            gotManifest = true
-          except: discard
+        for candName in cfg.manifestNameCandidates(rp.name):
+          if gotManifest: break
+          let fallback = cacheDir / candName
+          var hasFall = false
+          try: hasFall = cfg.driver.exists(relativePath(fallback, cfg.rootPath))
+          except: hasFall = fileExists(fallback)
+          if hasFall:
+            try:
+              let content =
+                try: cfg.driver.read(relativePath(fallback, cfg.rootPath))
+                except: readFile(fallback)
+              manifest = cfg.parseManifest(content, fallback)
+              gotManifest = true
+            except: discard
       if not gotManifest:
         manifest = Manifest(path: manifestPath, extra: newJObject())
       proc getStrSeq(node: JsonNode, key: string): seq[string] =
