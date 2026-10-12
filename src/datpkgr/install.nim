@@ -218,7 +218,7 @@ proc installedRecordsAll*(cfg: DatpkgrConfig): Table[string, seq[InstalledRecord
     for (pk, row) in tbl.allRows():
       let name = row["name"].strVal
       if name.len == 0: continue
-      result[name].add(InstalledRecord(
+      result.mgetOrPut(name, @[]).add(InstalledRecord(
         version: row["version"].strVal,
         path: row["path"].strVal,
         root: row.hasKey("root") and row["root"].boolVal

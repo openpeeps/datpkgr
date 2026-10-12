@@ -503,7 +503,14 @@ proc setupDatpkgrStores*(cfg: DatpkgrConfig, hasDatabase: bool) =
     cfg.logInfo("Initializing database...")
     let sources = cfg.loadSources()
     var seededAny = false
+    var triedAny = false
     for src in sources:
+      if src.url.len == 0:
+        # Registry-less hosts (URL/develop installs only): an empty URL
+        # can never download, so skip quietly instead of curl noise.
+        cfg.logDebug("Skipping sourceless registry entry: " & src.name)
+        continue
+      triedAny = true
       let cacheFile = cfg.sourceCachePath(src.name)
       var registryPackages: JsonNode
       var gotData = false
@@ -551,7 +558,7 @@ proc setupDatpkgrStores*(cfg: DatpkgrConfig, hasDatabase: bool) =
         seededAny = true
     if seededAny:
       cfg.stores.db.checkpoint()
-    else:
+    elif triedAny:
       cfg.logWarn("No registry data seeded — run source.fetch")
 
 proc refreshSource*(cfg: DatpkgrConfig, sourceName: string): bool =
