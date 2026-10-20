@@ -448,11 +448,12 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
     onDone: proc(name: string, versions: int, cached: bool) = nil):
     Table[string, seq[DiscoveredVersion]] =
   ## Discover versions for many packages at once. The clone-and-list steps run
-  ## on the install-time pool (`./pool`); DB cache writes happen sequentially
-  ## on the caller's thread since the store isn't thread-safe. `onDone` is
-  ## called on the caller's thread as each package finishes (for progress),
-  ## with `cached` true when it was served locally — installed on disk or
-  ## from the local DB (no network).
+  ## on the install-time pool (`./pool`); completions stream back live via
+  ## `runPoolStreaming` and each package's tags are read and cached
+  ## sequentially on the caller's thread since the store isn't thread-safe.
+  ## `onDone` fires on the caller's thread as each package finishes (for
+  ## progress), with `cached` true when it was served locally — installed on
+  ## disk or from the local DB (no network).
   ## With `refresh` existing clones are fetched (`git fetch --tags`) so new
   ## remote tags are picked up for every package. Progress events are replayed
   ## post-join, in channel order (nondeterministic across packages).
@@ -509,9 +510,40 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
         preExisted.incl(pkg.name)
       jobs.add((jobs.len, pkg.name, pkg.url, dest, refresh,
         cfg.allowSubmodules))
-    let (resSeq, progSeq) = runPool(jobs, fetchTagsJob)
+    # (`fetched` is a plain local because `result` itself cannot be captured
+    # by a closure; merged into `result` after the drain.)
+    var fetched = initTable[string, seq[DiscoveredVersion]]()
+    proc onEachFetch(idx: int, res: TagFetchRes) =
+      if idx < 0 or idx >= jobs.len:
+        return
+      let j = jobs[idx]
+      # Re-list tags here on the caller: the worker ensured the clone/fetch
+      # above, and shipping the tag list across threads would violate the
+      # pool contract (SIGSEGV). A failed clone yields an empty tag list,
+      # exactly like the old `(name, @[])` failure value.
+      let tags =
+        if not res.ok: @[]
+        else:
+          try: findLocalTags(j.dest)
+          except: @[]
+      let versions = discoverFromTags(j.name, tags)
+      cfg.debugLog("discover " & j.name & ": " & $versions.len & " version(s), " & $tags.len & " tag(s)")
+      cfg.cacheVersions(j.name, versions)
+      fetched[j.name] = versions
+      if onDone != nil:
+        onDone(j.name, versions.len, not refresh and j.name in preExisted)
+    # Streaming drain: `onEachFetch` runs on this thread as each worker
+    # finishes, so `onDone` fires live (a `done/total checked` counter stays
+    # interactive) instead of in one burst after the slowest job. Tag reads
+    # and cache writes stay sequential on this thread since the store isn't
+    # thread-safe.
+    let (_, progSeq) = runPoolStreaming(jobs, fetchTagsJob, onEachFetch)
+    for name, versions in fetched:
+      result[name] = versions
     # Replay progress on this thread, resolving display strings from our own
     # jobs (worker → main payloads are index-only by pool.nim contract).
+    # Start events stay post-join, in channel order (nondeterministic across
+    # packages).
     for ev in progSeq:
       if ev.idx < 0 or ev.idx >= jobs.len:
         continue
@@ -525,25 +557,6 @@ proc discoverVersionsBatch*(cfg: DatpkgrConfig, pkgs: openArray[PkgRef], refresh
           cfg.callbacks.onCloneStart(j.name, j.url)
       of pkInstallStart:
         discard
-    for r in resSeq:
-      if r.idx < 0 or r.idx >= jobs.len:
-        continue
-      let j = jobs[r.idx]
-      # Re-list tags here on the caller: the worker ensured the clone/fetch
-      # above, and shipping the tag list across threads would violate the
-      # pool contract (SIGSEGV). A failed clone yields an empty tag list,
-      # exactly like the old `(name, @[])` failure value.
-      let tags =
-        if not r.ok: @[]
-        else:
-          try: findLocalTags(j.dest)
-          except: @[]
-      let versions = discoverFromTags(j.name, tags)
-      cfg.debugLog("discover " & j.name & ": " & $versions.len & " version(s), " & $tags.len & " tag(s)")
-      cfg.cacheVersions(j.name, versions)
-      result[j.name] = versions
-      if onDone != nil:
-        onDone(j.name, versions.len, not refresh and j.name in preExisted)
 
 proc headVersion*(cfg: DatpkgrConfig, name: string): Version =
   ## Version to register for a package with no semver tags: the version

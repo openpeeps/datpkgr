@@ -195,3 +195,21 @@ suite "operations — installPackage develop root":
     check cfg.fetchPkgMeta("devpkg", "nim-lang").isSome
     check cfg.installPackage("devpkg", verbose = false, suppressSummary = true)
     check cfg.installedRecords("devpkg").len == 1
+
+suite "operations — update helpers":
+  test "isOutdatedUpdate compares semver, empty means missing":
+    check isOutdatedUpdate("", "1.0.0")
+    check not isOutdatedUpdate("1.0.0", "1.0.0")
+    check isOutdatedUpdate("1.0.0", "1.1.0")
+    check not isOutdatedUpdate("2.0.0", "1.9.9")
+
+  test "isOutdatedUpdate treats identical non-semver as current":
+    check not isOutdatedUpdate("HEAD", "HEAD")
+    check isOutdatedUpdate("HEAD", "1.0.0")
+    check isOutdatedUpdate("main", "0.2.0")
+
+  test "updatePackages with no names is a no-op success":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    check cfg.updatePackages(@[], verbose = false)

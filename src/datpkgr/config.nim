@@ -42,6 +42,10 @@ type
     onInstallStart*: proc(label: string) {.gcsafe.}
       ## Fired when installation of one resolved package starts
       ## (`label` is e.g. `name@1.2.3`). Optional; nil = silent.
+    onCheckProgress*: proc(done, total: int, name: string) {.gcsafe.}
+      ## Fired as each package finishes its update check (`done` of `total`,
+      ## `name` is the package that just finished). Optional; nil = silent.
+      ## Hosts render a single-line `done/total packages checked` counter here.
     onSubmodules*: proc(name, dest: string) {.gcsafe.}
       ## Fired once a package is installed whose checkout carries git
       ## submodules (`name` is the package, `dest` its cache checkout).

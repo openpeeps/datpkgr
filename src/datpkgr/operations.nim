@@ -897,47 +897,202 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
 # update / develop / prune / fetch / uninstall
 # ----------------------------------------------------------------------
 
-proc updateRootSubprocess(exe, name: string): int {.gcsafe.} =
-  var subEnv = newStringTable()
-  for k, v in envPairs():
-    subEnv[k] = v
-  var p = startProcess(exe, args = ["update", name], env = subEnv,
-    options = {poUsePath, poParentStreams})
-  result = p.waitForExit()
-  p.close()
+var updateCloneSeen {.threadvar.}: HashSet[string]
+var updateCloneOrig {.threadvar.}: proc(name, url: string) {.gcsafe.}
 
-proc updateRootWorker*(job: tuple[exe, name: string],
-    progress: Chan[ProgressEvent]): int {.gcsafe.} =
-  ## Pool worker: one subprocess per root. The child inherits the parent
-  ## streams, so its output is visible directly; no progress events needed.
+proc updateCloneDedup(name, url: string) {.gcsafe.} =
+  ## Deduped clone-start relay for bulk updates. Sequential per-root installs
+  ## share transitive deps, so the same `name|url` would otherwise log once
+  ## per root. All emits happen on the main thread (workers use the `*Raw`
+  ## git variants and report index-only progress), so a thread-local seen set
+  ## is sufficient.
+  let key = name & "|" & url
+  if key in updateCloneSeen:
+    return
+  updateCloneSeen.incl(key)
+  if updateCloneOrig != nil:
+    updateCloneOrig(name, url)
+
+proc installedVerForUpdate(cfg: DatpkgrConfig, name: string): string =
+  ## Newest installed version for `name`, "" when nothing is installed.
+  ## Prefers on-disk semver rows (the reusable bits), falling back to any
+  ## recorded row so HEAD/ref installs still diff instead of reinstalling
+  ## blindly.
+  let inst = cfg.installedVersionsForReuse(name)
+  if inst.len > 0:
+    return $inst[0].version
+  var best: Version
+  var haveBest = false
+  var fallback = ""
+  for rec in cfg.installedRecords(name):
+    if rec.version.len == 0:
+      continue
+    if fallback.len == 0:
+      fallback = rec.version
+    try:
+      let v = parseVersion(rec.version)
+      if not haveBest or v > best:
+        best = v
+        haveBest = true
+    except CatchableError:
+      discard
+  if haveBest: $best else: fallback
+
+proc latestVerForUpdate(versions: seq[DiscoveredVersion]): string =
+  if versions.len == 0: "HEAD" else: $versions[0].version
+
+proc isOutdatedUpdate*(installed, latest: string): bool =
+  ## True when `latest` is newer than `installed`. Empty `installed` means
+  ## not installed (needs install). Identical strings are up-to-date;
+  ## non-semver rows (HEAD/ref) only refresh when the string moved.
+  if installed.len == 0:
+    return true
+  if installed == latest:
+    return false
   try:
-    updateRootSubprocess(job.exe, job.name)
-  except:
-    1
+    return cmp(parseVersion(latest), parseVersion(installed)) > 0
+  except CatchableError:
+    return true
 
 proc updatePackage*(cfg: DatpkgrConfig, name: string, verbose = false): bool =
   let recs = cfg.installedRecords(name)
   if recs.len > 0 and recs.all(proc(r: InstalledRecord): bool = cfg.isDevInstall(r)):
     cfg.logInfo("Skipping develop-mode package " & name & " (editable source, not registry-managed)")
     return true
+  let installed = cfg.installedVerForUpdate(name)
+  let metaOpt = cfg.fetchPkgMeta(name)
+  if metaOpt.isNone:
+    # Unknown to the registry: let install report the error consistently.
+    return cfg.installPackage(name, "", refresh = true, verbose = verbose)
+  var discovered: seq[DiscoveredVersion]
+  try:
+    discovered = cfg.discoverVersions(metaOpt.get().name, metaOpt.get().url,
+      refresh = true)
+  except CatchableError:
+    discovered = @[]
+  let latest = latestVerForUpdate(discovered)
+  if installed.len > 0 and not isOutdatedUpdate(installed, latest):
+    cfg.logInfo("Already up to date: " & name & "@" & installed)
+    return true
+  if installed.len > 0 and installed != latest:
+    cfg.logInfo("Updating " & name & " " & installed & " -> " & latest)
   result = cfg.installPackage(name, "", refresh = true, verbose = verbose)
 
+proc updateScopeNames*(cfg: DatpkgrConfig, directs: seq[string]): seq[string] =
+  ## Recorded transitive closure of `directs` (`directs` included) for
+  ## project-scoped updates. Falls back to `directs` when nothing is recorded
+  ## yet (a never-installed project resolves its tree on install).
+  let scope = cfg.collectInstalledDepNames(directs)
+  if scope.len == 0: directs else: scope
+
+proc updatePackages*(cfg: DatpkgrConfig, names: seq[string],
+    verbose = false): bool =
+  ## Check-then-update over an explicit package list in a single process.
+  ##
+  ## The version check (`discoverVersionsBatch` with `refresh = true`) is the
+  ## multithreaded phase: clones/fetches run on the install-time pool while
+  ## DB writes stay sequential on this thread. Entries already at their latest
+  ## version are skipped silently, so up-to-date packages print nothing.
+  ## Only outdated entries are installed (sequentially — the store is not
+  ## thread-safe), with one header and one summary for the whole run and
+  ## deduped clone-start lines for shared transitive deps.
+  if names.len == 0:
+    cfg.logInfo("No packages to update")
+    return true
+  if names.len == 1:
+    return cfg.updatePackage(names[0], verbose)
+  var metas: seq[PkgRef]
+  var seenMeta = initHashSet[string]()
+  for name in names:
+    if name in seenMeta:
+      continue
+    seenMeta.incl(name)
+    if cfg.isDevelopAvailable(name):
+      continue # silent in bulk; the single-package path still reports it
+    let m = cfg.fetchPkgMeta(name)
+    if m.isNone:
+      cfg.logWarn("Unknown package in registry, skipping: " & name)
+      continue
+    metas.add(m.get())
+  if metas.len == 0:
+    cfg.logInfo("All packages up to date")
+    return true
+  # The check is the multithreaded phase: clones/fetches run on the pool
+  # while this thread streams completions into a single-line `done/total`
+  # counter. Per-package clone lines stay off during the check so the one
+  # line is the whole story; non-interactive hosts (nil progress callback)
+  # get one static line instead.
+  let savedCheckClone = cfg.callbacks.onCloneStart
+  cfg.callbacks.onCloneStart = nil
+  if cfg.callbacks.onCheckProgress == nil:
+    cfg.logInfo("Checking " & $metas.len & " " & pluralize(metas.len, "package") & " for updates...")
+  var discovered: Table[string, seq[DiscoveredVersion]]
+  var checked = 0
+  let checkTotal = metas.len
+  proc onChecked(name: string, vers: int, cached: bool) =
+    inc checked
+    if cfg.callbacks.onCheckProgress != nil:
+      cfg.callbacks.onCheckProgress(checked, checkTotal, name)
+  try:
+    discovered = cfg.discoverVersionsBatch(metas, refresh = true, onDone = onChecked)
+  except CatchableError as e:
+    cfg.logError("Failed to check for updates: " & e.msg)
+    return false
+  finally:
+    cfg.callbacks.onCloneStart = savedCheckClone
+  type UpdateItem = tuple[name, oldVer, newVer: string]
+  var outdated: seq[UpdateItem]
+  for m in metas:
+    let installed = cfg.installedVerForUpdate(m.name)
+    let vers = discovered.getOrDefault(m.name, @[])
+    let latest = latestVerForUpdate(vers)
+    if installed.len > 0 and not isOutdatedUpdate(installed, latest):
+      continue # up-to-date: silent
+    if installed.len == 0 and vers.len == 0:
+      continue # nothing known; avoid reinstall-loop noise
+    outdated.add((m.name, installed, latest))
+  if outdated.len == 0:
+    cfg.logInfo("All packages up to date")
+    return true
+  cfg.logInfo("Updating " & $outdated.len & " " & pluralize(outdated.len, "package") & "...")
+  let savedClone = cfg.callbacks.onCloneStart
+  let savedInstallStart = cfg.callbacks.onInstallStart
+  updateCloneSeen = initHashSet[string]()
+  updateCloneOrig = savedClone
+  cfg.callbacks.onCloneStart = updateCloneDedup
+  cfg.callbacks.onInstallStart = nil
+  var failures: seq[string]
+  var updated: seq[UpdateItem]
+  try:
+    for item in outdated:
+      if item.oldVer.len > 0:
+        cfg.logInfo("  " & item.name & " " & item.oldVer & " -> " & item.newVer)
+      else:
+        cfg.logInfo("  " & item.name & " -> " & item.newVer)
+      let ok = cfg.installPackage(item.name, "", refresh = true,
+        verbose = verbose, suppressSummary = true, showTree = false)
+      if ok:
+        updated.add(item)
+      else:
+        failures.add(item.name)
+  finally:
+    cfg.callbacks.onCloneStart = savedClone
+    cfg.callbacks.onInstallStart = savedInstallStart
+    updateCloneOrig = nil
+  if failures.len > 0:
+    cfg.logError("Failed to update: " & failures.join(", "))
+    return false
+  cfg.logSuccess("Updated " & $updated.len & " " & pluralize(updated.len, "package"))
+  return true
+
 proc updateAllPackages*(cfg: DatpkgrConfig, verbose = false, exePath = ""): bool =
+  ## Global update: check-then-update over all installed roots.
+  discard exePath # legacy subprocess fan-out removed; updates run in-process
   let roots = cfg.installedRoots()
   if roots.len == 0:
     cfg.logInfo("No installed packages to update")
     return true
-  if roots.len == 1:
-    return cfg.updatePackage(roots[0], verbose)
-  else:
-    let exe = if exePath.len > 0: exePath else: getAppFilename()
-    var jobs: seq[tuple[exe, name: string]]
-    for name in roots:
-      jobs.add((exe, name))
-    let (codes, _) = runPool(jobs, updateRootWorker)
-    if codes.anyIt(it != 0):
-      return false
-    return true
+  result = cfg.updatePackages(roots, verbose)
 
 proc developPackage*(cfg: DatpkgrConfig, dir: string, verbose = true): bool =
   let manifestPath = cfg.findManifestForDir(dir)
