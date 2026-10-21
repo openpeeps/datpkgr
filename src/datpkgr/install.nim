@@ -335,6 +335,33 @@ proc depNamesFor*(cfg: DatpkgrConfig, name: string,
         if dn.len == 0:
           dn = dep.url.split('/')[^1]
           if dn.endsWith(".git"): dn.setLen(dn.len - 4)
+        # Manifest is authoritative when the registry misses: a cached
+        # checkout under the guessed basename may already carry the real
+        # manifest (`tasks` → `supranim_tasks`). Prefer it when present so
+        # the closure walks the recorded (real) name instead of reporting
+        # the guessed one as missing. No cloning here — builds stay offline.
+        if dn.len > 0 and dep.url.len > 0:
+          let cacheDir = cfg.pkgsCachePath() / dn
+          var hasCache = false
+          try: hasCache = cfg.driver.exists(relativePath(cacheDir, cfg.rootPath))
+          except: hasCache = dirExists(cacheDir)
+          if hasCache:
+            let mf = cfg.findManifestInDir(cacheDir)
+            if mf.len > 0:
+              var canon = ""
+              try:
+                let content =
+                  try: cfg.driver.read(relativePath(mf, cfg.rootPath))
+                  except: readFile(mf)
+                let m = cfg.parseManifest(content, mf)
+                if m.name.len > 0:
+                  canon = m.name
+              except CatchableError:
+                discard
+              if canon.len == 0:
+                canon = mf.extractFilename.changeFileExt("")
+              if canon.len > 0 and canon != dn:
+                dn = canon
       if dn.len > 0 and dn notin seen:
         seen.incl(dn)
         result.add(dn)

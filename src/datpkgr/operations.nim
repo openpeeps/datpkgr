@@ -48,6 +48,98 @@ proc depName*(d: PkgDependency): string =
   elif d.url.len > 0: pkgNameFromUrl(d.url)
   else: ""
 
+proc depName*(cfg: DatpkgrConfig, d: PkgDependency): string =
+  ## Registry-aware dependency name. A URL-only dependency (no `name`) is
+  ## looked up in the registry first, so a repository whose basename differs
+  ## from its package (`supranim/tasks` → `supranim_tasks`) resolves to the
+  ## real name. Falls back to the repository basename for private or
+  ## unpublished URLs; callers then refine via `canonicalNameForUrl` which
+  ## reads the cloned manifest (the ultimate authority).
+  if d.name.len > 0: d.name
+  elif d.url.len > 0:
+    let reg =
+      try: cfg.pkgNameForUrl(d.url)
+      except CatchableError: ""
+    if reg.len > 0: reg else: pkgNameFromUrl(d.url)
+  else: ""
+
+proc canonicalNameForUrl*(cfg: DatpkgrConfig, guessed, url: string): string =
+  ## The real package name a repository URL provides.
+  ##
+  ## Resolution order: registry → cloned manifest → basename guess.
+  ## The manifest is authoritative: a private or newly-published repo absent
+  ## from the registry still yields its true name once cloned, and a stale
+  ## registry entry is corrected by what is actually on disk.
+  ## When the canonical name differs, the `_cache/<guessed>` checkout is moved
+  ## to `_cache/<canonical>` (when the latter is absent) so later phases
+  ## (`discoverVersions`, `getDeps`, install) find it under one identity.
+  if url.len == 0 or guessed.len == 0:
+    return guessed
+  let reg =
+    try: cfg.pkgNameForUrl(url)
+    except CatchableError: ""
+  if reg.len > 0 and reg != guessed:
+    let src = cfg.pkgsCachePath() / guessed
+    let dst = cfg.pkgsCachePath() / reg
+    var hasSrc = false
+    var hasDst = false
+    try: hasSrc = cfg.driver.exists(relativePath(src, cfg.rootPath))
+    except: hasSrc = dirExists(src)
+    try: hasDst = cfg.driver.exists(relativePath(dst, cfg.rootPath))
+    except: hasDst = dirExists(dst)
+    if hasSrc and not hasDst:
+      try: cfg.driver.moveDir(relativePath(src, cfg.rootPath), relativePath(dst, cfg.rootPath))
+      except:
+        try: moveDir(src, dst) except: discard
+    return reg
+  if reg.len > 0:
+    return reg
+  let dest = cfg.pkgsCachePath() / guessed
+  var existsDest = false
+  try: existsDest = cfg.driver.exists(relativePath(dest, cfg.rootPath))
+  except: existsDest = dirExists(dest)
+  if not existsDest:
+    if not cfg.clonePackage(url, dest, nonInteractive = true):
+      return guessed
+  let mf = cfg.findManifestInDir(dest)
+  if mf.len == 0:
+    return guessed
+  var canon = ""
+  try:
+    let content =
+      try: cfg.driver.read(relativePath(mf, cfg.rootPath))
+      except: readFile(mf)
+    let m = cfg.parseManifest(content, mf)
+    if m.name.len > 0:
+      canon = m.name
+  except CatchableError:
+    discard
+  if canon.len == 0:
+    canon = mf.extractFilename.changeFileExt("")
+    if canon == "manifest":
+      canon = ""
+  if canon.len == 0 or canon == guessed:
+    return guessed
+  let dst = cfg.pkgsCachePath() / canon
+  var hasDst = false
+  try: hasDst = cfg.driver.exists(relativePath(dst, cfg.rootPath))
+  except: hasDst = dirExists(dst)
+  if not hasDst:
+    try: cfg.driver.moveDir(relativePath(dest, cfg.rootPath), relativePath(dst, cfg.rootPath))
+    except:
+      try: moveDir(dest, dst) except: discard
+  canon
+
+proc urlDepName*(cfg: DatpkgrConfig, d: PkgDependency): string =
+  ## Full URL → name resolution: registry/basename guess refined by the
+  ## cloned manifest. Use for every URL-only dependency before it enters
+  ## `pkgRefs`, the registry, or the resolver.
+  if d.name.len > 0:
+    return d.name
+  if d.url.len == 0:
+    return ""
+  cfg.canonicalNameForUrl(cfg.depName(d), d.url)
+
 proc parseFeatureFlags*(s: string): seq[string] =
   for f in s.split(','):
     let ff = f.strip()
@@ -401,23 +493,38 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
     if closureMode:
       # `curName` is a label here, never a resolution root. Seed from the
       # caller's direct deps instead and treat them as the record roots.
+      # URL-only deps are canonicalized first: a repository basename need not
+      # equal its package (`supranim/tasks` → `supranim_tasks`), and the
+      # manifest is authoritative when the registry is stale or the repo is
+      # private. Without this the closure resolves under the guessed name
+      # while the install lands under the real one.
       rootNames = @[]
       resolveRoots = @[]
       for r in directRoots:
-        if r.name.len == 0:
+        if r.name.len == 0 and r.url.len == 0:
           continue
-        var meta = PkgRef(name: r.name, url: r.url, refStr: r.refStr)
-        if meta.url.len == 0 and not cfg.isDevelopAvailable(r.name):
-          let m = cfg.fetchPkgMeta(r.name, sourceFilter)
+        var canonName = r.name
+        if r.url.len > 0:
+          let guessed =
+            if r.name.len > 0: r.name
+            else: pkgNameFromUrl(r.url)
+          canonName = cfg.canonicalNameForUrl(guessed, r.url)
+          if canonName.len == 0:
+            canonName = guessed
+        if canonName.len == 0:
+          continue
+        var meta = PkgRef(name: canonName, url: r.url, refStr: r.refStr)
+        if meta.url.len == 0 and not cfg.isDevelopAvailable(canonName):
+          let m = cfg.fetchPkgMeta(canonName, sourceFilter)
           if m.isSome:
             meta = m.get()
-        if meta.url.len == 0 and not cfg.isDevelopAvailable(r.name):
-          warn("Unknown package in registry, skipping: " & r.name)
+        if meta.url.len == 0 and not cfg.isDevelopAvailable(canonName):
+          warn("Unknown package in registry, skipping: " & canonName)
           continue
-        if not pkgRefs.hasKey(r.name):
-          pkgRefs[r.name] = meta
-        rootNames.add(r.name)
-        resolveRoots.add(Dependency(name: r.name, constraint: r.constraint,
+        if not pkgRefs.hasKey(canonName):
+          pkgRefs[canonName] = meta
+        rootNames.add(canonName)
+        resolveRoots.add(Dependency(name: canonName, constraint: r.constraint,
           features: r.features))
     pkgRefs[curName] = rootMeta
 
@@ -465,7 +572,9 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         let ver = if versions.len > 0: $versions[0].version else: "0.0.0"
         let depsUrl = if isDevMeta: "" else: meta.url
         for d in cfg.getDeps(name, ver, @[], refresh, depsUrl):
-          let dn = depName(d)
+          let dn =
+            if d.url.len > 0: cfg.urlDepName(d)
+            else: cfg.depName(d)
           if dn.len == 0:
             if d.url.len > 0:
               warn("cannot derive package name from URL: " & d.url & " - skipping")
@@ -534,7 +643,9 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       let deps = cfg.getDeps(name, $version, feats, refresh, providerUrl)
       result = @[]
       for d in deps:
-        let dn = depName(d)
+        let dn =
+          if d.url.len > 0: cfg.urlDepName(d)
+          else: cfg.depName(d)
         if dn.len == 0:
           if d.url.len > 0:
             warn("cannot derive package name from URL: " & d.url & " - skipping")
@@ -641,7 +752,9 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       if rootVer.len > 0:
         for d in cfg.getDeps(curName, rootVer, activeFeatOf.getOrDefault(curName),
             url = pkgRefs.getOrDefault(curName).url):
-          let dn = depName(d)
+          let dn =
+            if d.url.len > 0: cfg.urlDepName(d)
+            else: cfg.depName(d)
           if dn.len > 0 and dn notin depsOnlyDirect:
             depsOnlyDirect.add(dn)
     if verbose and showTree:
@@ -706,7 +819,11 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
         discard parseVersion(verStr)
         return name & "@" & verStr
       except CatchableError:
-        return name & "#HEAD"
+        # Branch/tag pin (e.g. `testbr`, `main`): show the ref, not HEAD.
+        # `HEAD` itself normalizes to `#HEAD`.
+        if verStr.toLowerAscii == "head":
+          return name & "#HEAD"
+        return name & "#" & verStr
     var installedCount = 0
     var installedLabels: seq[string]
     var jobs: seq[InstallJob]
@@ -840,7 +957,9 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
       let feats = activeFeatOf.getOrDefault(rp.name)
       var deps: seq[types.DepEntry]
       for d in cfg.getDeps(rp.name, $rp.version, feats, url = pkgRefs.getOrDefault(rp.name).url):
-        let dn = depName(d)
+        let dn =
+          if d.url.len > 0: cfg.urlDepName(d)
+          else: cfg.depName(d)
         if d.branch.len > 0:
           deps.add((dn, d.branch))
         elif verStrs.hasKey(dn) and verStrs[dn].len > 0:
@@ -1122,11 +1241,11 @@ proc developPackage*(cfg: DatpkgrConfig, dir: string, verbose = true): bool =
   var deps: seq[types.DepEntry]
   for d in manifest.dependencies:
     if d.isToolchain: continue
-    deps.add((depName(d), ""))
+    deps.add((cfg.depName(d), ""))
   for _, fdeps in manifest.features:
     for d in fdeps:
       if d.isToolchain: continue
-      let dn = depName(d)
+      let dn = cfg.depName(d)
       if dn.len > 0 and deps.anyIt(it.name == dn) == false:
         discard
   cfg.recordInstall(pkgName, version, deps, root = true,

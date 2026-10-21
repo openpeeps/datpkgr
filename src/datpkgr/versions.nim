@@ -718,11 +718,51 @@ proc defaultBranch(cfg: DatpkgrConfig, dest: string): string =
     b = "master"
   b
 
+proc listManifestFilesViaGit(cfg: DatpkgrConfig, dest, refStr: string): seq[string] =
+  ## List top-level files present in a git ref (via `git ls-tree`), filtered
+  ## to plausible manifest filenames. Used when the expected manifest name
+  ## (derived from a guessed package name) does not exist — e.g. a repository
+  ## whose basename differs from its manifest (`supranim/tasks` ships
+  ## `supranim_tasks.nimble`). Only top-level entries are considered since
+  ## manifests live at the package root.
+  try:
+    let (output, code) = cfg.gitExec("git -C " & dest & " ls-tree --name-only " & refStr)
+    if code != 0:
+      return @[]
+    # Plausible manifest suffixes: the configured extension plus the YAML
+    # alternate, so generic toolchains benefit too.
+    var suffixes = initHashSet[string]()
+    for cand in cfg.manifestNameCandidates("*"):
+      let starPos = cand.find('*')
+      if starPos >= 0:
+        let suffix = cand[starPos+1 .. ^1]
+        if suffix.len > 0:
+          suffixes.incl(suffix.toLowerAscii)
+      else:
+        let dotPos = cand.rfind('.')
+        if dotPos >= 0:
+          suffixes.incl(cand[dotPos .. ^1].toLowerAscii)
+    for line in output.splitLines():
+      let f = line.strip()
+      if f.len == 0 or '/' in f:
+        continue
+      let lower = f.toLowerAscii
+      for sfx in suffixes:
+        if lower.endsWith(sfx):
+          result.add(f)
+          break
+  except CatchableError:
+    discard
+
 proc readManifestContent*(cfg: DatpkgrConfig, dest, name, version: string): string =
   ## Read a package version's manifest file via `git show` — no working-tree
   ## checkout. Uses `cfg.manifestNameForPkg` so the entry file is pluggable,
   ## falling back to the YAML spelling alternate (`.yml` <-> `.yaml`) so
   ## repos using either extension resolve.
+  ## When the expected name misses (a URL dependency guessed from the repo
+  ## basename while the manifest carries the real package name), the ref's
+  ## file list is inspected for any sibling manifest and each candidate is
+  ## tried, so dependency lists are never silently dropped.
   var manifestNames = @[cfg.manifestNameForPkg(name)]
   let alt = alternateManifestName(manifestNames[0])
   if alt.len > 0 and alt != manifestNames[0]:
@@ -735,16 +775,30 @@ proc readManifestContent*(cfg: DatpkgrConfig, dest, name, version: string): stri
         try: tagForVersion(cfg, dest, version)
         except: tagForVersion(dest, version)
       else: tagForVersion(dest, version)
+  let refStr =
+    if version == "0.0.0" or tag.len == 0:
+      "origin/" & cfg.defaultBranch(dest)
+    else:
+      tag
   for manifestName in manifestNames:
     let (output, exitCode) =
       if version == "0.0.0" or tag.len == 0:
         # No semver tag (tagless repo, or a headVersion fallback like 0.1.0
         # with zero tags) — read the manifest at HEAD so deps are not dropped.
-        cfg.gitExec("git -C " & dest & " show origin/" & cfg.defaultBranch(dest) & ":" &
+        cfg.gitExec("git -C " & dest & " show " & refStr & ":" &
           manifestName)
       else:
         cfg.gitExec("git -C " & dest & " show " & tag & ":" & manifestName)
     if exitCode == 0:
+      return output
+  # Expected name missed — the repo basename and the manifest name diverge
+  # (e.g. `tasks` vs `supranim_tasks.nimble`). Discover the real manifest
+  # via the ref's file list and try each candidate.
+  for cand in cfg.listManifestFilesViaGit(dest, refStr):
+    if cand in manifestNames:
+      continue
+    let (output, exitCode) = cfg.gitExec("git -C " & dest & " show " & refStr & ":" & cand)
+    if exitCode == 0 and output.strip().len > 0:
       return output
   ""
 
