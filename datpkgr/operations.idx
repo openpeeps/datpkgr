@@ -1,16 +1,31 @@
 nimTitle	operations	datpkgr/operations.html	module datpkgr/operations		0
-nim	pkgNameFromUrl	datpkgr/operations.html#pkgNameFromUrl,string	proc pkgNameFromUrl(url: string): string		32
-nim	depName	datpkgr/operations.html#depName,PkgDependency	proc depName(d: PkgDependency): string		49
-nim	parseFeatureFlags	datpkgr/operations.html#parseFeatureFlags,string	proc parseFeatureFlags(s: string): seq[string]		54
-nim	isGitUrl	datpkgr/operations.html#isGitUrl,string	proc isGitUrl(s: string): bool		60
-nim	pluralize	datpkgr/operations.html#pluralize,int,string	proc pluralize(n: int; singular: string): string		65
-nim	isRecordRoot	datpkgr/operations.html#isRecordRoot,string,string,bool,openArray[string]	proc isRecordRoot(name, curName: string; depsOnly: bool;\n             depsOnlyDirect: openArray[string]): bool		68
-nim	installPackage	datpkgr/operations.html#installPackage,DatpkgrConfig,string,string,seq[string],string,VersionConstraint,string,string,proc(string,string,string)	proc installPackage(cfg: DatpkgrConfig; pkgName: string; pkgRef: string = "";\n               refresh = false; features: seq[string] = @[]; verbose = true;\n               url = ""; doBuild = false; buildRelease = true;\n               buildDebug = false; constraint: VersionConstraint = VersionConstraint(\n    kind: vcAny, version: newVersion(0, 0, 0, "", "")); backend = "c";\n               sourceFilter: string = ""; buildHook: proc (pkgName: string;\n    preferRef: string; backend: string): bool = nil; suppressSummary = false;\n               depsOnly = false): bool		187
-nim	updatePackage	datpkgr/operations.html#updatePackage,DatpkgrConfig,string	proc updatePackage(cfg: DatpkgrConfig; name: string; verbose = false): bool		781
-nim	updateAllPackages	datpkgr/operations.html#updateAllPackages,DatpkgrConfig,string	proc updateAllPackages(cfg: DatpkgrConfig; verbose = false; exePath = ""): bool		788
-nim	developPackage	datpkgr/operations.html#developPackage,DatpkgrConfig,string	proc developPackage(cfg: DatpkgrConfig; dir: string; verbose = true): bool		806
-nim	prunePackages	datpkgr/operations.html#prunePackages,DatpkgrConfig	proc prunePackages(cfg: DatpkgrConfig; verbose = true)		843
-nim	fetchRegistry	datpkgr/operations.html#fetchRegistry,DatpkgrConfig	proc fetchRegistry(cfg: DatpkgrConfig): bool		846
-nim	installedHasPackage	datpkgr/operations.html#installedHasPackage,DatpkgrConfig,string	proc installedHasPackage(cfg: DatpkgrConfig; pkgName: string): bool		849
-nim	uninstallPackage	datpkgr/operations.html#uninstallPackage,DatpkgrConfig,string,string,proc(string)	proc uninstallPackage(cfg: DatpkgrConfig; pkgName: string; pkgVersion: string = "";\n                 confirm: proc (msg: string): bool = nil; verbose = true): bool		875
-nim	versionsFor	datpkgr/operations.html#versionsFor,DatpkgrConfig,string	proc versionsFor(cfg: DatpkgrConfig; pkgName: string; refresh = false): seq[\n    DiscoveredVersion]		945
+nim	depName	datpkgr/operations.html#depName,PkgDependency	proc depName(d: PkgDependency): string		29
+nim	depName	datpkgr/operations.html#depName,DatpkgrConfig,PkgDependency	proc depName(cfg: DatpkgrConfig; d: PkgDependency): string		34
+nim	canonicalNameForUrl	datpkgr/operations.html#canonicalNameForUrl,DatpkgrConfig,string,string	proc canonicalNameForUrl(cfg: DatpkgrConfig; guessed, url: string): string		49
+nim	urlDepName	datpkgr/operations.html#urlDepName,DatpkgrConfig,PkgDependency	proc urlDepName(cfg: DatpkgrConfig; d: PkgDependency): string		116
+nim	parseFeatureFlags	datpkgr/operations.html#parseFeatureFlags,string	proc parseFeatureFlags(s: string): seq[string]		126
+nim	isGitUrl	datpkgr/operations.html#isGitUrl,string	proc isGitUrl(s: string): bool		132
+nim	pluralize	datpkgr/operations.html#pluralize,int,string	proc pluralize(n: int; singular: string): string		137
+nim	destHasSubmodules	datpkgr/operations.html#destHasSubmodules,string	proc destHasSubmodules(cacheDir: string): bool		140
+nim	notifySubmodules	datpkgr/operations.html#notifySubmodules,DatpkgrConfig,string,string	proc notifySubmodules(cfg: DatpkgrConfig; name, cacheDir: string)		144
+nim	isRecordRoot	datpkgr/operations.html#isRecordRoot,string,string,bool,openArray[string]	proc isRecordRoot(name, curName: string; depsOnly: bool;\n             depsOnlyDirect: openArray[string]): bool		157
+nim	ClosureRoot	datpkgr/operations.html#ClosureRoot	object ClosureRoot		170
+nim	installWorker	datpkgr/operations.html#installWorker,InstallJob,Chan[ProgressEvent]	proc installWorker(job: InstallJob; progress: Chan[ProgressEvent]): bool		255
+nim	resolveRootMeta	datpkgr/operations.html#resolveRootMeta,DatpkgrConfig,string,string	proc resolveRootMeta(cfg: DatpkgrConfig; name, sourceFilter: string): Option[PkgRef]		289
+nim	ensureDirectPackageRecord	datpkgr/operations.html#ensureDirectPackageRecord,DatpkgrConfig,string,string,string,string,string	proc ensureDirectPackageRecord(cfg: DatpkgrConfig;\n                          name, url, description, license: string; meth = "git")		307
+nim	installPackage	datpkgr/operations.html#installPackage,DatpkgrConfig,string,string,seq[string],string,VersionConstraint,string,string,proc(string,string,string),seq[ClosureRoot]	proc installPackage(cfg: DatpkgrConfig; pkgName: string; pkgRef: string = "";\n               refresh = false; features: seq[string] = @[]; verbose = true;\n               url = ""; doBuild = false; buildRelease = true;\n               buildDebug = false; constraint: VersionConstraint = VersionConstraint(\n    kind: vcAny, version: newVersion(0, 0, 0, "", "")); backend = "c";\n               sourceFilter: string = ""; buildHook: proc (pkgName: string;\n    preferRef: string; backend: string): bool = nil; suppressSummary = false;\n               depsOnly = false; showTree = true;\n               directRoots: seq[ClosureRoot] = @[]): bool		332
+nim	isOutdatedUpdate	datpkgr/operations.html#isOutdatedUpdate,string,string	proc isOutdatedUpdate(installed, latest: string): bool		1074
+nim	UpdateItem	datpkgr/operations.html#UpdateItem	tuple UpdateItem		1087
+nim	updatePackageDetailed	datpkgr/operations.html#updatePackageDetailed,DatpkgrConfig,string	proc updatePackageDetailed(cfg: DatpkgrConfig; name: string; verbose = false): tuple[\n    ok: bool, updated: seq[UpdateItem]]		1092
+nim	updatePackage	datpkgr/operations.html#updatePackage,DatpkgrConfig,string	proc updatePackage(cfg: DatpkgrConfig; name: string; verbose = false): bool		1134
+nim	updateScopeNames	datpkgr/operations.html#updateScopeNames,DatpkgrConfig,seq[string]	proc updateScopeNames(cfg: DatpkgrConfig; directs: seq[string]): seq[string]		1137
+nim	updatePackagesDetailed	datpkgr/operations.html#updatePackagesDetailed,DatpkgrConfig,seq[string]	proc updatePackagesDetailed(cfg: DatpkgrConfig; names: seq[string]; verbose = false): tuple[\n    ok: bool, updated: seq[UpdateItem]]		1144
+nim	updatePackages	datpkgr/operations.html#updatePackages,DatpkgrConfig,seq[string]	proc updatePackages(cfg: DatpkgrConfig; names: seq[string]; verbose = false): bool		1245
+nim	updateAllPackages	datpkgr/operations.html#updateAllPackages,DatpkgrConfig,string	proc updateAllPackages(cfg: DatpkgrConfig; verbose = false; exePath = ""): bool		1249
+nim	developPackage	datpkgr/operations.html#developPackage,DatpkgrConfig,string	proc developPackage(cfg: DatpkgrConfig; dir: string; verbose = true): bool		1258
+nim	prunePackages	datpkgr/operations.html#prunePackages,DatpkgrConfig	proc prunePackages(cfg: DatpkgrConfig; verbose = true)		1298
+nim	fetchRegistry	datpkgr/operations.html#fetchRegistry,DatpkgrConfig	proc fetchRegistry(cfg: DatpkgrConfig): bool		1301
+nim	installedHasPackage	datpkgr/operations.html#installedHasPackage,DatpkgrConfig,string	proc installedHasPackage(cfg: DatpkgrConfig; pkgName: string): bool		1304
+nim	uninstallPackage	datpkgr/operations.html#uninstallPackage,DatpkgrConfig,string,string,proc(string)	proc uninstallPackage(cfg: DatpkgrConfig; pkgName: string; pkgVersion: string = "";\n                 confirm: proc (msg: string): bool = nil; verbose = true): bool		1331
+nim	versionsFor	datpkgr/operations.html#versionsFor,DatpkgrConfig,string	proc versionsFor(cfg: DatpkgrConfig; pkgName: string; refresh = false): seq[\n    DiscoveredVersion]		1401
+nimgrp	depname	datpkgr/operations.html#depName-procs-all	proc		29

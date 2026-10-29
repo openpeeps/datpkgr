@@ -77,6 +77,8 @@
       <li><a class="reference" href="#failedClones" title="failedClones = initHashSet(64)">failedClones</a></li>
 <li><a class="reference" href="#failedClonesLock" title="failedClonesLock: Lock">failedClonesLock</a></li>
 <li><a class="reference" href="#gitSemaphore" title="gitSemaphore = createSemaphore(8)">gitSemaphore</a></li>
+<li><a class="reference" href="#sshFailedHosts" title="sshFailedHosts = initHashSet(64)">sshFailedHosts</a></li>
+<li><a class="reference" href="#sshFailedHostsLock" title="sshFailedHostsLock: Lock">sshFailedHostsLock</a></li>
 
     </ul>
   </details>
@@ -99,7 +101,7 @@
 
 </ul>
 <ul class="simple nested-toc-section">checkoutHeadRaw
-  <li><a class="reference" href="#checkoutHeadRaw%2Cstring" title="checkoutHeadRaw(dest: string; refresh = false): bool">checkoutHeadRaw(dest: string; refresh = false): bool</a></li>
+  <li><a class="reference" href="#checkoutHeadRaw%2Cstring" title="checkoutHeadRaw(dest: string; refresh = false; allowSubmodules = false): bool">checkoutHeadRaw(dest: string; refresh = false; allowSubmodules = false): bool</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">checkoutRef
@@ -107,7 +109,7 @@
 
 </ul>
 <ul class="simple nested-toc-section">checkoutRefRaw
-  <li><a class="reference" href="#checkoutRefRaw%2Cstring%2Cstring" title="checkoutRefRaw(dest, refStr: string; refresh = false): bool">checkoutRefRaw(dest, refStr: string; refresh = false): bool</a></li>
+  <li><a class="reference" href="#checkoutRefRaw%2Cstring%2Cstring" title="checkoutRefRaw(dest, refStr: string; refresh = false; allowSubmodules = false): bool">checkoutRefRaw(dest, refStr: string; refresh = false; allowSubmodules = false): bool</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">checkoutTag
@@ -115,7 +117,7 @@
 
 </ul>
 <ul class="simple nested-toc-section">checkoutTagRaw
-  <li><a class="reference" href="#checkoutTagRaw%2Cstring%2Cstring" title="checkoutTagRaw(dest, tag: string): bool">checkoutTagRaw(dest, tag: string): bool</a></li>
+  <li><a class="reference" href="#checkoutTagRaw%2Cstring%2Cstring" title="checkoutTagRaw(dest, tag: string; allowSubmodules = false): bool">checkoutTagRaw(dest, tag: string; allowSubmodules = false): bool</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">clonePackage
@@ -126,6 +128,10 @@
 </ul>
 <ul class="simple nested-toc-section">cloneRepo
   <li><a class="reference" href="#cloneRepo%2CDatpkgrConfig%2Cstring%2Cstring" title="cloneRepo(cfg: DatpkgrConfig; url, dest: string; nonInteractive = false): bool">cloneRepo(cfg: DatpkgrConfig; url, dest: string; nonInteractive = false): bool</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">cloneRepoRaw
+  <li><a class="reference" href="#cloneRepoRaw%2Cstring%2Cstring" title="cloneRepoRaw(url, dest: string; nonInteractive = false; allowSubmodules = false): bool">cloneRepoRaw(url, dest: string; nonInteractive = false; allowSubmodules = false): bool</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">gitEnv
@@ -154,12 +160,38 @@
   <li><a class="reference" href="#gitHeadInfo%2CDatpkgrConfig%2Cstring%2Cstring" title="gitHeadInfo(cfg: DatpkgrConfig; name, url: string): Option[GitHeadInfo]">gitHeadInfo(cfg: DatpkgrConfig; name, url: string): Option[GitHeadInfo]</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">markSshBad
+  <li><a class="reference" href="#markSshBad%2Cstring" title="markSshBad(host: string)">markSshBad(host: string)</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">refreshRemoteTags
   <li><a class="reference" href="#refreshRemoteTags%2CDatpkgrConfig%2Cstring%2Cstring" title="refreshRemoteTags(cfg: DatpkgrConfig; dest, url: string; nonInteractive = false): bool">refreshRemoteTags(cfg: DatpkgrConfig; dest, url: string; nonInteractive = false): bool</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">refreshRemoteTagsRaw
+  <li><a class="reference" href="#refreshRemoteTagsRaw%2Cstring%2Cstring" title="refreshRemoteTagsRaw(dest, url: string; nonInteractive = false;
+                     allowSubmodules = false): bool">refreshRemoteTagsRaw(dest, url: string; nonInteractive = false;
+                     allowSubmodules = false): bool</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">sshHostOf
+  <li><a class="reference" href="#sshHostOf%2Cstring" title="sshHostOf(url: string): string">sshHostOf(url: string): string</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">sshKnownBad
+  <li><a class="reference" href="#sshKnownBad%2Cstring" title="sshKnownBad(host: string): bool">sshKnownBad(host: string): bool</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">toGitSshUrl
   <li><a class="reference" href="#toGitSshUrl%2Cstring" title="toGitSshUrl(url: string): string">toGitSshUrl(url: string): string</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">updateSubmodules
+  <li><a class="reference" href="#updateSubmodules%2CDatpkgrConfig%2Cstring" title="updateSubmodules(cfg: DatpkgrConfig; dest: string): bool">updateSubmodules(cfg: DatpkgrConfig; dest: string): bool</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">updateSubmodulesRaw
+  <li><a class="reference" href="#updateSubmodulesRaw%2Cstring" title="updateSubmodulesRaw(dest: string; allowSubmodules = false): bool">updateSubmodulesRaw(dest: string; allowSubmodules = false): bool</a></li>
 
 </ul>
 
@@ -226,6 +258,22 @@
     
   </dd>
 </div>
+<div id="sshFailedHosts">
+  <dt><pre><a href="#sshFailedHosts"><span class="Identifier">sshFailedHosts</span></a> <span class="Other">=</span> <span class="Identifier">initHashSet</span><span class="Other">(</span><span class="DecNumber">64</span><span class="Other">)</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="sshFailedHostsLock">
+  <dt><pre><a href="#sshFailedHostsLock"><span class="Identifier">sshFailedHostsLock</span></a><span class="Other">:</span> <span class="Identifier">Lock</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
 
   </dl>
 </div>
@@ -262,10 +310,10 @@
 </div>
 <div id="checkoutHeadRaw-procs-all">
   <div id="checkoutHeadRaw,string">
-  <dt><pre><span class="Keyword">proc</span> <a href="#checkoutHeadRaw%2Cstring"><span class="Identifier">checkoutHeadRaw</span></a><span class="Other">(</span><span class="Identifier">dest</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">refresh</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span>
-    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span>
-    <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#checkoutHeadRaw%2Cstring"><span class="Identifier">checkoutHeadRaw</span></a><span class="Other">(</span><span class="Identifier">dest</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">refresh</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">;</span> <span class="Identifier">allowSubmodules</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadEnvEffect</span><span class="Other">,</span>
+    <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span>
+    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     
@@ -290,7 +338,8 @@
 </div>
 <div id="checkoutRefRaw-procs-all">
   <div id="checkoutRefRaw,string,string">
-  <dt><pre><span class="Keyword">proc</span> <a href="#checkoutRefRaw%2Cstring%2Cstring"><span class="Identifier">checkoutRefRaw</span></a><span class="Other">(</span><span class="Identifier">dest</span><span class="Other">,</span> <span class="Identifier">refStr</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">refresh</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span>
+  <dt><pre><span class="Keyword">proc</span> <a href="#checkoutRefRaw%2Cstring%2Cstring"><span class="Identifier">checkoutRefRaw</span></a><span class="Other">(</span><span class="Identifier">dest</span><span class="Other">,</span> <span class="Identifier">refStr</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">refresh</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">;</span>
+                    <span class="Identifier">allowSubmodules</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span>
     <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span>
     <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
     <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
@@ -318,7 +367,7 @@
 </div>
 <div id="checkoutTagRaw-procs-all">
   <div id="checkoutTagRaw,string,string">
-  <dt><pre><span class="Keyword">proc</span> <a href="#checkoutTagRaw%2Cstring%2Cstring"><span class="Identifier">checkoutTagRaw</span></a><span class="Other">(</span><span class="Identifier">dest</span><span class="Other">,</span> <span class="Identifier">tag</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span>
+  <dt><pre><span class="Keyword">proc</span> <a href="#checkoutTagRaw%2Cstring%2Cstring"><span class="Identifier">checkoutTagRaw</span></a><span class="Other">(</span><span class="Identifier">dest</span><span class="Other">,</span> <span class="Identifier">tag</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">allowSubmodules</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span>
     <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span>
     <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
     <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
@@ -334,9 +383,9 @@
   <div id="clonePackage,DatpkgrConfig,string,string">
   <dt><pre><span class="Keyword">proc</span> <a href="#clonePackage%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">clonePackage</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">url</span><span class="Other">,</span> <span class="Identifier">dest</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">refresh</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">;</span>
                   <span class="Identifier">nonInteractive</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.
-    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span>
+    <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     
@@ -348,12 +397,27 @@
 <div id="cloneRepo-procs-all">
   <div id="cloneRepo,DatpkgrConfig,string,string">
   <dt><pre><span class="Keyword">proc</span> <a href="#cloneRepo%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">cloneRepo</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">url</span><span class="Other">,</span> <span class="Identifier">dest</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">nonInteractive</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.
-    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span>
+    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     
+    
+  </dd>
+</div>
+
+</div>
+<div id="cloneRepoRaw-procs-all">
+  <div id="cloneRepoRaw,string,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#cloneRepoRaw%2Cstring%2Cstring"><span class="Identifier">cloneRepoRaw</span></a><span class="Other">(</span><span class="Identifier">url</span><span class="Other">,</span> <span class="Identifier">dest</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">nonInteractive</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">;</span>
+                  <span class="Identifier">allowSubmodules</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span>
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span>
+    <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Worker-safe clone: no <tt class="docutils literal"><span class="pre"><span class="Identifier">cfg</span></span></tt>, no callbacks, no stores. Progress (if any) is emitted by the calling worker through its progress channel.
     
   </dd>
 </div>
@@ -418,9 +482,20 @@
 <div id="gitHeadInfo-procs-all">
   <div id="gitHeadInfo,DatpkgrConfig,string,string">
   <dt><pre><span class="Keyword">proc</span> <a href="#gitHeadInfo%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">gitHeadInfo</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">,</span> <span class="Identifier">url</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">Option</span><span class="Other">[</span><a href="#GitHeadInfo"><span class="Identifier">GitHeadInfo</span></a><span class="Other">]</span> {.
-    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span>
+    <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="markSshBad-procs-all">
+  <div id="markSshBad,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#markSshBad%2Cstring"><span class="Identifier">markSshBad</span></a><span class="Other">(</span><span class="Identifier">host</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     
@@ -432,13 +507,50 @@
 <div id="refreshRemoteTags-procs-all">
   <div id="refreshRemoteTags,DatpkgrConfig,string,string">
   <dt><pre><span class="Keyword">proc</span> <a href="#refreshRemoteTags%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">refreshRemoteTags</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">dest</span><span class="Other">,</span> <span class="Identifier">url</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span>
-                       <span class="Identifier">nonInteractive</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span>
-    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadEnvEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span>
+                       <span class="Identifier">nonInteractive</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span>
     <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     
+    
+  </dd>
+</div>
+
+</div>
+<div id="refreshRemoteTagsRaw-procs-all">
+  <div id="refreshRemoteTagsRaw,string,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#refreshRemoteTagsRaw%2Cstring%2Cstring"><span class="Identifier">refreshRemoteTagsRaw</span></a><span class="Other">(</span><span class="Identifier">dest</span><span class="Other">,</span> <span class="Identifier">url</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">nonInteractive</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">;</span>
+                          <span class="Identifier">allowSubmodules</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span>
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span>
+    <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Worker-safe fetch: no <tt class="docutils literal"><span class="pre"><span class="Identifier">cfg</span></span></tt>, no callbacks, no stores.
+    
+  </dd>
+</div>
+
+</div>
+<div id="sshHostOf-procs-all">
+  <div id="sshHostOf,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#sshHostOf%2Cstring"><span class="Identifier">sshHostOf</span></a><span class="Other">(</span><span class="Identifier">url</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Host part of an http(s) URL, or &quot;&quot; when the URL isn't ssh-convertible (already ssh-style, or unparsable — no separate SSH attempt exists then).
+    
+  </dd>
+</div>
+
+</div>
+<div id="sshKnownBad-procs-all">
+  <div id="sshKnownBad,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#sshKnownBad%2Cstring"><span class="Identifier">sshKnownBad</span></a><span class="Other">(</span><span class="Identifier">host</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    True when SSH to <tt class="docutils literal"><span class="pre"><span class="Identifier">host</span></span></tt> already failed once in this process — later clones then skip the doomed SSH attempt (up to <tt class="docutils literal"><span class="pre"><span class="Identifier">ConnectTimeout</span></span></tt> stall).
     
   </dd>
 </div>
@@ -455,6 +567,34 @@
 </div>
 
 </div>
+<div id="updateSubmodules-procs-all">
+  <div id="updateSubmodules,DatpkgrConfig,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#updateSubmodules%2CDatpkgrConfig%2Cstring"><span class="Identifier">updateSubmodules</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">dest</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span>
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">ReadEnvEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Init/update submodules in <tt class="docutils literal"><span class="pre"><span class="Identifier">dest</span></span></tt>. Only runs when <tt class="docutils literal"><span class="pre"><span class="Identifier">cfg</span><span class="Operator">.</span><span class="Identifier">allowSubmodules</span></span></tt> is enabled; otherwise a no-op returning true. Warn-and-continue on failure so a dead/private submodule never aborts the install.
+    
+  </dd>
+</div>
+
+</div>
+<div id="updateSubmodulesRaw-procs-all">
+  <div id="updateSubmodulesRaw,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#updateSubmodulesRaw%2Cstring"><span class="Identifier">updateSubmodulesRaw</span></a><span class="Other">(</span><span class="Identifier">dest</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">allowSubmodules</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span><span class="Other">,</span>
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadEnvEffect</span><span class="Other">,</span>
+    <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Thread-safe submodule init without touching <tt class="docutils literal"><span class="pre"><span class="Identifier">cfg</span></span></tt> (usable off main thread).
+    
+  </dd>
+</div>
+
+</div>
 
   </dl>
 </div>
@@ -465,7 +605,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-09-10 08:37:18 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-10-29 23:08:39 UTC</small>
       </div>
     </div>
   </div>

@@ -1,0 +1,9 @@
+nimTitle	pool	datpkgr/pool.html	module datpkgr/pool		0
+nim	pkFetchStart	datpkgr/pool.html#pkFetchStart	ProgressKind.pkFetchStart		15
+nim	pkCloneStart	datpkgr/pool.html#pkCloneStart	ProgressKind.pkCloneStart		15
+nim	pkInstallStart	datpkgr/pool.html#pkInstallStart	ProgressKind.pkInstallStart		15
+nim	ProgressKind	datpkgr/pool.html#ProgressKind	enum ProgressKind		15
+nim	ProgressEvent	datpkgr/pool.html#ProgressEvent	object ProgressEvent		20
+nim	poolSizeFor	datpkgr/pool.html#poolSizeFor,int	proc poolSizeFor(nJobs: int): int		26
+nim	runPoolStreaming	datpkgr/pool.html#runPoolStreaming,seq[J],proc(J,Chan[ProgressEvent]),proc(int,R)	proc runPoolStreaming[J, R](jobs: seq[J]; worker: proc (job: J;\n    progress: Chan[ProgressEvent]): R {.gcsafe.};\n                       onResult: proc (idx: int; res: R)): tuple[\n    results: seq[R], progress: seq[ProgressEvent]]		38
+nim	runPool	datpkgr/pool.html#runPool,seq[J],proc(J,Chan[ProgressEvent])	proc runPool[J, R](jobs: seq[J];\n              worker: proc (job: J; progress: Chan[ProgressEvent]): R {.gcsafe.}): tuple[\n    results: seq[R], progress: seq[ProgressEvent]]		97

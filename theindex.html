@@ -28,7 +28,7 @@
     <label for="nav-toggle" id="nav-overlay"></label>
     <div class="container">
       <h1 class="title">Index</h1>
-      Modules: <a href="index.html">datpkgr</a>, <a href="datpkgr/config.html">datpkgr/config</a>, <a href="datpkgr/git.html">datpkgr/git</a>, <a href="datpkgr/install.html">datpkgr/install</a>, <a href="datpkgr/operations.html">datpkgr/operations</a>, <a href="datpkgr/resolver.html">datpkgr/resolver</a>, <a href="datpkgr/store.html">datpkgr/store</a>, <a href="datpkgr/types.html">datpkgr/types</a>, <a href="datpkgr/versions.html">datpkgr/versions</a>.<br/><p /><h2>API symbols</h2>
+      Modules: <a href="index.html">datpkgr</a>, <a href="datpkgr/config.html">datpkgr/config</a>, <a href="datpkgr/git.html">datpkgr/git</a>, <a href="datpkgr/install.html">datpkgr/install</a>, <a href="datpkgr/operations.html">datpkgr/operations</a>, <a href="datpkgr/pool.html">datpkgr/pool</a>, <a href="datpkgr/resolver.html">datpkgr/resolver</a>, <a href="datpkgr/store.html">datpkgr/store</a>, <a href="datpkgr/types.html">datpkgr/types</a>, <a href="datpkgr/versions.html">datpkgr/versions</a>.<br/><p /><h2>API symbols</h2>
 <dl><dt><a name="%60%24%60" href="#%60%24%60"><span>`$`:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="resolver: proc `$`(rp: ResolvedPackage): string" href="datpkgr/resolver.html#%24%2CResolvedPackage">resolver: proc `$`(rp: ResolvedPackage): string</a></li>
@@ -46,6 +46,10 @@
 <dt><a name="allInstalledPaths" href="#allInstalledPaths"><span>allInstalledPaths:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="install: proc allInstalledPaths(cfg: DatpkgrConfig): seq[string]" href="datpkgr/install.html#allInstalledPaths%2CDatpkgrConfig">install: proc allInstalledPaths(cfg: DatpkgrConfig): seq[string]</a></li>
+          </ul></dd>
+<dt><a name="alternateManifestName" href="#alternateManifestName"><span>alternateManifestName:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="config: proc alternateManifestName(name: string): string" href="datpkgr/config.html#alternateManifestName%2Cstring">config: proc alternateManifestName(name: string): string</a></li>
           </ul></dd>
 <dt><a name="BacktrackLimitError" href="#BacktrackLimitError"><span>BacktrackLimitError:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -67,13 +71,21 @@
 <li><a class="reference external"
           data-doc-search-tag="config: object Callbacks" href="datpkgr/config.html#Callbacks">config: object Callbacks</a></li>
           </ul></dd>
+<dt><a name="canonicalNameForAlias" href="#canonicalNameForAlias"><span>canonicalNameForAlias:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="store: proc canonicalNameForAlias(cfg: DatpkgrConfig; name: string): string" href="datpkgr/store.html#canonicalNameForAlias%2CDatpkgrConfig%2Cstring">store: proc canonicalNameForAlias(cfg: DatpkgrConfig; name: string): string</a></li>
+          </ul></dd>
+<dt><a name="canonicalNameForUrl" href="#canonicalNameForUrl"><span>canonicalNameForUrl:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc canonicalNameForUrl(cfg: DatpkgrConfig; guessed, url: string): string" href="datpkgr/operations.html#canonicalNameForUrl%2CDatpkgrConfig%2Cstring%2Cstring">operations: proc canonicalNameForUrl(cfg: DatpkgrConfig; guessed, url: string): string</a></li>
+          </ul></dd>
 <dt><a name="checkoutHead" href="#checkoutHead"><span>checkoutHead:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="git: proc checkoutHead(cfg: DatpkgrConfig; dest: string; refresh = false): bool" href="datpkgr/git.html#checkoutHead%2CDatpkgrConfig%2Cstring">git: proc checkoutHead(cfg: DatpkgrConfig; dest: string; refresh = false): bool</a></li>
           </ul></dd>
 <dt><a name="checkoutHeadRaw" href="#checkoutHeadRaw"><span>checkoutHeadRaw:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
-          data-doc-search-tag="git: proc checkoutHeadRaw(dest: string; refresh = false): bool" href="datpkgr/git.html#checkoutHeadRaw%2Cstring">git: proc checkoutHeadRaw(dest: string; refresh = false): bool</a></li>
+          data-doc-search-tag="git: proc checkoutHeadRaw(dest: string; refresh = false; allowSubmodules = false): bool" href="datpkgr/git.html#checkoutHeadRaw%2Cstring">git: proc checkoutHeadRaw(dest: string; refresh = false; allowSubmodules = false): bool</a></li>
           </ul></dd>
 <dt><a name="checkoutRef" href="#checkoutRef"><span>checkoutRef:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -81,7 +93,7 @@
           </ul></dd>
 <dt><a name="checkoutRefRaw" href="#checkoutRefRaw"><span>checkoutRefRaw:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
-          data-doc-search-tag="git: proc checkoutRefRaw(dest, refStr: string; refresh = false): bool" href="datpkgr/git.html#checkoutRefRaw%2Cstring%2Cstring">git: proc checkoutRefRaw(dest, refStr: string; refresh = false): bool</a></li>
+          data-doc-search-tag="git: proc checkoutRefRaw(dest, refStr: string; refresh = false; allowSubmodules = false): bool" href="datpkgr/git.html#checkoutRefRaw%2Cstring%2Cstring">git: proc checkoutRefRaw(dest, refStr: string; refresh = false; allowSubmodules = false): bool</a></li>
           </ul></dd>
 <dt><a name="checkoutTag" href="#checkoutTag"><span>checkoutTag:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -89,7 +101,7 @@
           </ul></dd>
 <dt><a name="checkoutTagRaw" href="#checkoutTagRaw"><span>checkoutTagRaw:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
-          data-doc-search-tag="git: proc checkoutTagRaw(dest, tag: string): bool" href="datpkgr/git.html#checkoutTagRaw%2Cstring%2Cstring">git: proc checkoutTagRaw(dest, tag: string): bool</a></li>
+          data-doc-search-tag="git: proc checkoutTagRaw(dest, tag: string; allowSubmodules = false): bool" href="datpkgr/git.html#checkoutTagRaw%2Cstring%2Cstring">git: proc checkoutTagRaw(dest, tag: string; allowSubmodules = false): bool</a></li>
           </ul></dd>
 <dt><a name="CircularDependencyError" href="#CircularDependencyError"><span>CircularDependencyError:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -105,6 +117,22 @@
 <li><a class="reference external"
           data-doc-search-tag="git: proc cloneRepo(cfg: DatpkgrConfig; url, dest: string; nonInteractive = false): bool" href="datpkgr/git.html#cloneRepo%2CDatpkgrConfig%2Cstring%2Cstring">git: proc cloneRepo(cfg: DatpkgrConfig; url, dest: string; nonInteractive = false): bool</a></li>
           </ul></dd>
+<dt><a name="cloneRepoRaw" href="#cloneRepoRaw"><span>cloneRepoRaw:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="git: proc cloneRepoRaw(url, dest: string; nonInteractive = false; allowSubmodules = false): bool" href="datpkgr/git.html#cloneRepoRaw%2Cstring%2Cstring">git: proc cloneRepoRaw(url, dest: string; nonInteractive = false; allowSubmodules = false): bool</a></li>
+          </ul></dd>
+<dt><a name="closeDatpkgr" href="#closeDatpkgr"><span>closeDatpkgr:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="store: proc closeDatpkgr(cfg: DatpkgrConfig)" href="datpkgr/store.html#closeDatpkgr%2CDatpkgrConfig">store: proc closeDatpkgr(cfg: DatpkgrConfig)</a></li>
+          </ul></dd>
+<dt><a name="closureOnDisk" href="#closureOnDisk"><span>closureOnDisk:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: proc closureOnDisk(cfg: DatpkgrConfig; name: string): bool" href="datpkgr/install.html#closureOnDisk%2CDatpkgrConfig%2Cstring">install: proc closureOnDisk(cfg: DatpkgrConfig; name: string): bool</a></li>
+          </ul></dd>
+<dt><a name="ClosureRoot" href="#ClosureRoot"><span>ClosureRoot:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: object ClosureRoot" href="datpkgr/operations.html#ClosureRoot">operations: object ClosureRoot</a></li>
+          </ul></dd>
 <dt><a name="collectInstalledDepNames" href="#collectInstalledDepNames"><span>collectInstalledDepNames:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="install: proc collectInstalledDepNames(cfg: DatpkgrConfig; rootNames: seq[string]): seq[string]" href="datpkgr/install.html#collectInstalledDepNames%2CDatpkgrConfig%2Cseq%5Bstring%5D">install: proc collectInstalledDepNames(cfg: DatpkgrConfig; rootNames: seq[string]): seq[string]</a></li>
@@ -112,6 +140,10 @@
 <dt><a name="Config" href="#Config"><span>Config:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="config: type Config" href="datpkgr/config.html#Config">config: type Config</a></li>
+          </ul></dd>
+<dt><a name="createDevelopLink" href="#createDevelopLink"><span>createDevelopLink:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="config: proc createDevelopLink(cfg: DatpkgrConfig; target, link: string): bool" href="datpkgr/config.html#createDevelopLink%2CDatpkgrConfig%2Cstring%2Cstring">config: proc createDevelopLink(cfg: DatpkgrConfig; target, link: string): bool</a></li>
           </ul></dd>
 <dt><a name="DatpkgrConfig" href="#DatpkgrConfig"><span>DatpkgrConfig:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -141,11 +173,21 @@
           </ul></dd>
 <dt><a name="depName" href="#depName"><span>depName:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
+          data-doc-search-tag="operations: proc depName(cfg: DatpkgrConfig; d: PkgDependency): string" href="datpkgr/operations.html#depName%2CDatpkgrConfig%2CPkgDependency">operations: proc depName(cfg: DatpkgrConfig; d: PkgDependency): string</a></li>
+          <li><a class="reference external"
           data-doc-search-tag="operations: proc depName(d: PkgDependency): string" href="datpkgr/operations.html#depName%2CPkgDependency">operations: proc depName(d: PkgDependency): string</a></li>
+          </ul></dd>
+<dt><a name="depNamesFor" href="#depNamesFor"><span>depNamesFor:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: proc depNamesFor(cfg: DatpkgrConfig; name: string; recorded: seq[string]): seq[string]" href="datpkgr/install.html#depNamesFor%2CDatpkgrConfig%2Cstring%2Cseq%5Bstring%5D">install: proc depNamesFor(cfg: DatpkgrConfig; name: string; recorded: seq[string]): seq[string]</a></li>
           </ul></dd>
 <dt><a name="DepProvider" href="#DepProvider"><span>DepProvider:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="resolver: type DepProvider" href="datpkgr/resolver.html#DepProvider">resolver: type DepProvider</a></li>
+          </ul></dd>
+<dt><a name="destHasSubmodules" href="#destHasSubmodules"><span>destHasSubmodules:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc destHasSubmodules(cacheDir: string): bool" href="datpkgr/operations.html#destHasSubmodules%2Cstring">operations: proc destHasSubmodules(cacheDir: string): bool</a></li>
           </ul></dd>
 <dt><a name="developPackage" href="#developPackage"><span>developPackage:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -154,6 +196,18 @@
 <dt><a name="developPath" href="#developPath"><span>developPath:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="config: proc developPath(cfg: DatpkgrConfig): string" href="datpkgr/config.html#developPath%2CDatpkgrConfig">config: proc developPath(cfg: DatpkgrConfig): string</a></li>
+          </ul></dd>
+<dt><a name="developRecordPath" href="#developRecordPath"><span>developRecordPath:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: proc developRecordPath(cfg: DatpkgrConfig; name: string): string" href="datpkgr/install.html#developRecordPath%2CDatpkgrConfig%2Cstring">install: proc developRecordPath(cfg: DatpkgrConfig; name: string): string</a></li>
+          </ul></dd>
+<dt><a name="devShadowNotes" href="#devShadowNotes"><span>devShadowNotes:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: var devShadowNotes" href="datpkgr/install.html#devShadowNotes">install: var devShadowNotes</a></li>
+          </ul></dd>
+<dt><a name="devShadowNotesOnly" href="#devShadowNotesOnly"><span>devShadowNotesOnly:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: var devShadowNotesOnly" href="datpkgr/install.html#devShadowNotesOnly">install: var devShadowNotesOnly</a></li>
           </ul></dd>
 <dt><a name="devShadowWarningsEnabled" href="#devShadowWarningsEnabled"><span>devShadowWarningsEnabled:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -177,9 +231,19 @@
                       refresh = false; onDone: proc (name: string;
     versions: int; cached: bool) = nil): Table[string, seq[DiscoveredVersion]]</a></li>
           </ul></dd>
+<dt><a name="ensureDirectPackageRecord" href="#ensureDirectPackageRecord"><span>ensureDirectPackageRecord:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc ensureDirectPackageRecord(cfg: DatpkgrConfig;
+                          name, url, description, license: string; meth = &quot;git&quot;)" href="datpkgr/operations.html#ensureDirectPackageRecord%2CDatpkgrConfig%2Cstring%2Cstring%2Cstring%2Cstring%2Cstring">operations: proc ensureDirectPackageRecord(cfg: DatpkgrConfig;
+                          name, url, description, license: string; meth = &quot;git&quot;)</a></li>
+          </ul></dd>
 <dt><a name="ensureSourcesFile" href="#ensureSourcesFile"><span>ensureSourcesFile:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="store: proc ensureSourcesFile(cfg: DatpkgrConfig)" href="datpkgr/store.html#ensureSourcesFile%2CDatpkgrConfig">store: proc ensureSourcesFile(cfg: DatpkgrConfig)</a></li>
+          </ul></dd>
+<dt><a name="expandForgeAlias" href="#expandForgeAlias"><span>expandForgeAlias:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="store: proc expandForgeAlias(s: string): string" href="datpkgr/store.html#expandForgeAlias%2Cstring">store: proc expandForgeAlias(s: string): string</a></li>
           </ul></dd>
 <dt><a name="failedClones" href="#failedClones"><span>failedClones:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -202,6 +266,10 @@
 <dt><a name="fetchRegistry" href="#fetchRegistry"><span>fetchRegistry:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="operations: proc fetchRegistry(cfg: DatpkgrConfig): bool" href="datpkgr/operations.html#fetchRegistry%2CDatpkgrConfig">operations: proc fetchRegistry(cfg: DatpkgrConfig): bool</a></li>
+          </ul></dd>
+<dt><a name="fetchTagsJob" href="#fetchTagsJob"><span>fetchTagsJob:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="versions: proc fetchTagsJob(job: TagFetchJob; progress: Chan[ProgressEvent]): TagFetchRes" href="datpkgr/versions.html#fetchTagsJob%2CTagFetchJob%2CChan%5BProgressEvent%5D">versions: proc fetchTagsJob(job: TagFetchJob; progress: Chan[ProgressEvent]): TagFetchRes</a></li>
           </ul></dd>
 <dt><a name="findLocalTags" href="#findLocalTags"><span>findLocalTags:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -297,9 +365,31 @@
 <li><a class="reference external"
           data-doc-search-tag="install: proc installedRecords(cfg: DatpkgrConfig; name: string): seq[InstalledRecord]" href="datpkgr/install.html#installedRecords%2CDatpkgrConfig%2Cstring">install: proc installedRecords(cfg: DatpkgrConfig; name: string): seq[InstalledRecord]</a></li>
           </ul></dd>
+<dt><a name="installedRecordsAll" href="#installedRecordsAll"><span>installedRecordsAll:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: proc installedRecordsAll(cfg: DatpkgrConfig): Table[string, seq[InstalledRecord]]" href="datpkgr/install.html#installedRecordsAll%2CDatpkgrConfig">install: proc installedRecordsAll(cfg: DatpkgrConfig): Table[string, seq[InstalledRecord]]</a></li>
+          </ul></dd>
 <dt><a name="installedRoots" href="#installedRoots"><span>installedRoots:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="install: proc installedRoots(cfg: DatpkgrConfig): seq[string]" href="datpkgr/install.html#installedRoots%2CDatpkgrConfig">install: proc installedRoots(cfg: DatpkgrConfig): seq[string]</a></li>
+          </ul></dd>
+<dt><a name="InstalledSnapshot" href="#InstalledSnapshot"><span>InstalledSnapshot:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: object InstalledSnapshot" href="datpkgr/install.html#InstalledSnapshot">install: object InstalledSnapshot</a></li>
+          </ul></dd>
+<dt><a name="installedSnapshot" href="#installedSnapshot"><span>installedSnapshot:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: proc installedSnapshot(cfg: DatpkgrConfig): InstalledSnapshot" href="datpkgr/install.html#installedSnapshot%2CDatpkgrConfig">install: proc installedSnapshot(cfg: DatpkgrConfig): InstalledSnapshot</a></li>
+          </ul></dd>
+<dt><a name="installedVersionForReuse" href="#installedVersionForReuse"><span>installedVersionForReuse:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: proc installedVersionForReuse(cfg: DatpkgrConfig; name, refStr: string): string" href="datpkgr/install.html#installedVersionForReuse%2CDatpkgrConfig%2Cstring%2Cstring">install: proc installedVersionForReuse(cfg: DatpkgrConfig; name, refStr: string): string</a></li>
+          </ul></dd>
+<dt><a name="installedVersionsForReuse" href="#installedVersionsForReuse"><span>installedVersionsForReuse:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="versions: proc installedVersionsForReuse(cfg: DatpkgrConfig; name: string): seq[
+    DiscoveredVersion]" href="datpkgr/versions.html#installedVersionsForReuse%2CDatpkgrConfig%2Cstring">versions: proc installedVersionsForReuse(cfg: DatpkgrConfig; name: string): seq[
+    DiscoveredVersion]</a></li>
           </ul></dd>
 <dt><a name="installPackage" href="#installPackage"><span>installPackage:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -310,14 +400,20 @@
     kind: vcAny, version: newVersion(0, 0, 0, &quot;&quot;, &quot;&quot;)); backend = &quot;c&quot;;
                sourceFilter: string = &quot;&quot;; buildHook: proc (pkgName: string;
     preferRef: string; backend: string): bool = nil; suppressSummary = false;
-               depsOnly = false): bool" href="datpkgr/operations.html#installPackage%2CDatpkgrConfig%2Cstring%2Cstring%2Cseq%5Bstring%5D%2Cstring%2CVersionConstraint%2Cstring%2Cstring%2Cproc%28string%2Cstring%2Cstring%29">operations: proc installPackage(cfg: DatpkgrConfig; pkgName: string; pkgRef: string = &quot;&quot;;
+               depsOnly = false; showTree = true;
+               directRoots: seq[ClosureRoot] = @[]): bool" href="datpkgr/operations.html#installPackage%2CDatpkgrConfig%2Cstring%2Cstring%2Cseq%5Bstring%5D%2Cstring%2CVersionConstraint%2Cstring%2Cstring%2Cproc%28string%2Cstring%2Cstring%29%2Cseq%5BClosureRoot%5D">operations: proc installPackage(cfg: DatpkgrConfig; pkgName: string; pkgRef: string = &quot;&quot;;
                refresh = false; features: seq[string] = @[]; verbose = true;
                url = &quot;&quot;; doBuild = false; buildRelease = true;
                buildDebug = false; constraint: VersionConstraint = VersionConstraint(
     kind: vcAny, version: newVersion(0, 0, 0, &quot;&quot;, &quot;&quot;)); backend = &quot;c&quot;;
                sourceFilter: string = &quot;&quot;; buildHook: proc (pkgName: string;
     preferRef: string; backend: string): bool = nil; suppressSummary = false;
-               depsOnly = false): bool</a></li>
+               depsOnly = false; showTree = true;
+               directRoots: seq[ClosureRoot] = @[]): bool</a></li>
+          </ul></dd>
+<dt><a name="installWorker" href="#installWorker"><span>installWorker:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc installWorker(job: InstallJob; progress: Chan[ProgressEvent]): bool" href="datpkgr/operations.html#installWorker%2CInstallJob%2CChan%5BProgressEvent%5D">operations: proc installWorker(job: InstallJob; progress: Chan[ProgressEvent]): bool</a></li>
           </ul></dd>
 <dt><a name="isDevelopAvailable" href="#isDevelopAvailable"><span>isDevelopAvailable:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -326,6 +422,10 @@
 <dt><a name="isDevInstall" href="#isDevInstall"><span>isDevInstall:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="install: proc isDevInstall(cfg: DatpkgrConfig; rec: InstalledRecord): bool" href="datpkgr/install.html#isDevInstall%2CDatpkgrConfig%2CInstalledRecord">install: proc isDevInstall(cfg: DatpkgrConfig; rec: InstalledRecord): bool</a></li>
+          </ul></dd>
+<dt><a name="isForgeAliasShape" href="#isForgeAliasShape"><span>isForgeAliasShape:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="store: proc isForgeAliasShape(s: string): bool" href="datpkgr/store.html#isForgeAliasShape%2Cstring">store: proc isForgeAliasShape(s: string): bool</a></li>
           </ul></dd>
 <dt><a name="isGitUrl" href="#isGitUrl"><span>isGitUrl:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -339,11 +439,23 @@
 <li><a class="reference external"
           data-doc-search-tag="config: proc isInsidePkgs(cfg: DatpkgrConfig; dir: string): bool" href="datpkgr/config.html#isInsidePkgs%2CDatpkgrConfig%2Cstring">config: proc isInsidePkgs(cfg: DatpkgrConfig; dir: string): bool</a></li>
           </ul></dd>
+<dt><a name="isInstalledOnDisk" href="#isInstalledOnDisk"><span>isInstalledOnDisk:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: proc isInstalledOnDisk(cfg: DatpkgrConfig; name: string): bool" href="datpkgr/install.html#isInstalledOnDisk%2CDatpkgrConfig%2Cstring">install: proc isInstalledOnDisk(cfg: DatpkgrConfig; name: string): bool</a></li>
+          </ul></dd>
+<dt><a name="isOutdatedUpdate" href="#isOutdatedUpdate"><span>isOutdatedUpdate:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc isOutdatedUpdate(installed, latest: string): bool" href="datpkgr/operations.html#isOutdatedUpdate%2Cstring%2Cstring">operations: proc isOutdatedUpdate(installed, latest: string): bool</a></li>
+          </ul></dd>
 <dt><a name="isRecordRoot" href="#isRecordRoot"><span>isRecordRoot:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="operations: proc isRecordRoot(name, curName: string; depsOnly: bool;
              depsOnlyDirect: openArray[string]): bool" href="datpkgr/operations.html#isRecordRoot%2Cstring%2Cstring%2Cbool%2CopenArray%5Bstring%5D">operations: proc isRecordRoot(name, curName: string; depsOnly: bool;
              depsOnlyDirect: openArray[string]): bool</a></li>
+          </ul></dd>
+<dt><a name="isTaglessCached" href="#isTaglessCached"><span>isTaglessCached:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="versions: proc isTaglessCached(cfg: DatpkgrConfig; name: string): bool" href="datpkgr/versions.html#isTaglessCached%2CDatpkgrConfig%2Cstring">versions: proc isTaglessCached(cfg: DatpkgrConfig; name: string): bool</a></li>
           </ul></dd>
 <dt><a name="isValidSourceName" href="#isValidSourceName"><span>isValidSourceName:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -369,6 +481,14 @@
 <li><a class="reference external"
           data-doc-search-tag="config: enum LogLevel" href="datpkgr/config.html#LogLevel">config: enum LogLevel</a></li>
           </ul></dd>
+<dt><a name="LogSpan" href="#LogSpan"><span>LogSpan:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="config: tuple LogSpan" href="datpkgr/config.html#LogSpan">config: tuple LogSpan</a></li>
+          </ul></dd>
+<dt><a name="logStyled" href="#logStyled"><span>logStyled:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="config: proc logStyled(cfg: DatpkgrConfig; level: LogLevel; spans: varargs[LogSpan])" href="datpkgr/config.html#logStyled%2CDatpkgrConfig%2CLogLevel%2Cvarargs%5BLogSpan%5D">config: proc logStyled(cfg: DatpkgrConfig; level: LogLevel; spans: varargs[LogSpan])</a></li>
+          </ul></dd>
 <dt><a name="logSuccess" href="#logSuccess"><span>logSuccess:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="config: proc logSuccess(cfg: DatpkgrConfig; msg: string)" href="datpkgr/config.html#logSuccess%2CDatpkgrConfig%2Cstring">config: proc logSuccess(cfg: DatpkgrConfig; msg: string)</a></li>
@@ -376,6 +496,8 @@
 <dt><a name="logWarn" href="#logWarn"><span>logWarn:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="config: proc logWarn(cfg: DatpkgrConfig; msg: string)" href="datpkgr/config.html#logWarn%2CDatpkgrConfig%2Cstring">config: proc logWarn(cfg: DatpkgrConfig; msg: string)</a></li>
+          <li><a class="reference external"
+          data-doc-search-tag="config: proc logWarn(cfg: DatpkgrConfig; spans: varargs[LogSpan])" href="datpkgr/config.html#logWarn%2CDatpkgrConfig%2Cvarargs%5BLogSpan%5D">config: proc logWarn(cfg: DatpkgrConfig; spans: varargs[LogSpan])</a></li>
           </ul></dd>
 <dt><a name="lvlDebug" href="#lvlDebug"><span>lvlDebug:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -405,6 +527,10 @@
 <li><a class="reference external"
           data-doc-search-tag="types: type ManifestFinder" href="datpkgr/types.html#ManifestFinder">types: type ManifestFinder</a></li>
           </ul></dd>
+<dt><a name="manifestNameCandidates" href="#manifestNameCandidates"><span>manifestNameCandidates:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="config: proc manifestNameCandidates(cfg: DatpkgrConfig; pkgName = &quot;*&quot;): seq[string]" href="datpkgr/config.html#manifestNameCandidates%2CDatpkgrConfig%2Cstring">config: proc manifestNameCandidates(cfg: DatpkgrConfig; pkgName = &quot;*&quot;): seq[string]</a></li>
+          </ul></dd>
 <dt><a name="manifestNameForPkg" href="#manifestNameForPkg"><span>manifestNameForPkg:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="config: proc manifestNameForPkg(cfg: DatpkgrConfig; pkgName: string): string" href="datpkgr/config.html#manifestNameForPkg%2CDatpkgrConfig%2Cstring">config: proc manifestNameForPkg(cfg: DatpkgrConfig; pkgName: string): string</a></li>
@@ -412,6 +538,14 @@
 <dt><a name="ManifestParser" href="#ManifestParser"><span>ManifestParser:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="types: type ManifestParser" href="datpkgr/types.html#ManifestParser">types: type ManifestParser</a></li>
+          </ul></dd>
+<dt><a name="markInstalledRoot" href="#markInstalledRoot"><span>markInstalledRoot:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="install: proc markInstalledRoot(cfg: DatpkgrConfig; name, version: string)" href="datpkgr/install.html#markInstalledRoot%2CDatpkgrConfig%2Cstring%2Cstring">install: proc markInstalledRoot(cfg: DatpkgrConfig; name, version: string)</a></li>
+          </ul></dd>
+<dt><a name="markSshBad" href="#markSshBad"><span>markSshBad:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="git: proc markSshBad(host: string)" href="datpkgr/git.html#markSshBad%2Cstring">git: proc markSshBad(host: string)</a></li>
           </ul></dd>
 <dt><a name="MaxConcurrentGit" href="#MaxConcurrentGit"><span>MaxConcurrentGit:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -422,8 +556,20 @@
 <dt><a name="newDatpkgrConfig" href="#newDatpkgrConfig"><span>newDatpkgrConfig:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="config: proc newDatpkgrConfig(appName: string; rootPath = &quot;&quot;; debugEnabled = false;
-                 callbacks = Callbacks()): DatpkgrConfig" href="datpkgr/config.html#newDatpkgrConfig%2Cstring%2Cstring">config: proc newDatpkgrConfig(appName: string; rootPath = &quot;&quot;; debugEnabled = false;
-                 callbacks = Callbacks()): DatpkgrConfig</a></li>
+                 callbacks = Callbacks(); allowSubmodules = false): DatpkgrConfig" href="datpkgr/config.html#newDatpkgrConfig%2Cstring%2Cstring">config: proc newDatpkgrConfig(appName: string; rootPath = &quot;&quot;; debugEnabled = false;
+                 callbacks = Callbacks(); allowSubmodules = false): DatpkgrConfig</a></li>
+          </ul></dd>
+<dt><a name="normalizeRepoUrl" href="#normalizeRepoUrl"><span>normalizeRepoUrl:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="store: proc normalizeRepoUrl(url: string): string" href="datpkgr/store.html#normalizeRepoUrl%2Cstring">store: proc normalizeRepoUrl(url: string): string</a></li>
+          </ul></dd>
+<dt><a name="notifySubmodules" href="#notifySubmodules"><span>notifySubmodules:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc notifySubmodules(cfg: DatpkgrConfig; name, cacheDir: string)" href="datpkgr/operations.html#notifySubmodules%2CDatpkgrConfig%2Cstring%2Cstring">operations: proc notifySubmodules(cfg: DatpkgrConfig; name, cacheDir: string)</a></li>
+          </ul></dd>
+<dt><a name="openDatpkgrStores" href="#openDatpkgrStores"><span>openDatpkgrStores:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="store: proc openDatpkgrStores(cfg: DatpkgrConfig)" href="datpkgr/store.html#openDatpkgrStores%2CDatpkgrConfig">store: proc openDatpkgrStores(cfg: DatpkgrConfig)</a></li>
           </ul></dd>
 <dt><a name="Package" href="#Package"><span>Package:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -453,13 +599,25 @@
 <li><a class="reference external"
           data-doc-search-tag="install: proc pathForImports(cfg: DatpkgrConfig; p: string): string" href="datpkgr/install.html#pathForImports%2CDatpkgrConfig%2Cstring">install: proc pathForImports(cfg: DatpkgrConfig; p: string): string</a></li>
           </ul></dd>
+<dt><a name="pkCloneStart" href="#pkCloneStart"><span>pkCloneStart:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="pool: ProgressKind.pkCloneStart" href="datpkgr/pool.html#pkCloneStart">pool: ProgressKind.pkCloneStart</a></li>
+          </ul></dd>
+<dt><a name="pkFetchStart" href="#pkFetchStart"><span>pkFetchStart:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="pool: ProgressKind.pkFetchStart" href="datpkgr/pool.html#pkFetchStart">pool: ProgressKind.pkFetchStart</a></li>
+          </ul></dd>
 <dt><a name="PkgDependency" href="#PkgDependency"><span>PkgDependency:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="types: object PkgDependency" href="datpkgr/types.html#PkgDependency">types: object PkgDependency</a></li>
           </ul></dd>
+<dt><a name="pkgNameForUrl" href="#pkgNameForUrl"><span>pkgNameForUrl:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="store: proc pkgNameForUrl(cfg: DatpkgrConfig; url: string; sourceFilter: string = &quot;&quot;): string" href="datpkgr/store.html#pkgNameForUrl%2CDatpkgrConfig%2Cstring%2Cstring">store: proc pkgNameForUrl(cfg: DatpkgrConfig; url: string; sourceFilter: string = &quot;&quot;): string</a></li>
+          </ul></dd>
 <dt><a name="pkgNameFromUrl" href="#pkgNameFromUrl"><span>pkgNameFromUrl:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
-          data-doc-search-tag="operations: proc pkgNameFromUrl(url: string): string" href="datpkgr/operations.html#pkgNameFromUrl%2Cstring">operations: proc pkgNameFromUrl(url: string): string</a></li>
+          data-doc-search-tag="store: proc pkgNameFromUrl(url: string): string" href="datpkgr/store.html#pkgNameFromUrl%2Cstring">store: proc pkgNameFromUrl(url: string): string</a></li>
           </ul></dd>
 <dt><a name="PkgRef" href="#PkgRef"><span>PkgRef:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -473,9 +631,25 @@
 <li><a class="reference external"
           data-doc-search-tag="config: proc pkgsPath(cfg: DatpkgrConfig): string" href="datpkgr/config.html#pkgsPath%2CDatpkgrConfig">config: proc pkgsPath(cfg: DatpkgrConfig): string</a></li>
           </ul></dd>
+<dt><a name="pkInstallStart" href="#pkInstallStart"><span>pkInstallStart:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="pool: ProgressKind.pkInstallStart" href="datpkgr/pool.html#pkInstallStart">pool: ProgressKind.pkInstallStart</a></li>
+          </ul></dd>
 <dt><a name="pluralize" href="#pluralize"><span>pluralize:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="operations: proc pluralize(n: int; singular: string): string" href="datpkgr/operations.html#pluralize%2Cint%2Cstring">operations: proc pluralize(n: int; singular: string): string</a></li>
+          </ul></dd>
+<dt><a name="poolSizeFor" href="#poolSizeFor"><span>poolSizeFor:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="pool: proc poolSizeFor(nJobs: int): int" href="datpkgr/pool.html#poolSizeFor%2Cint">pool: proc poolSizeFor(nJobs: int): int</a></li>
+          </ul></dd>
+<dt><a name="ProgressEvent" href="#ProgressEvent"><span>ProgressEvent:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="pool: object ProgressEvent" href="datpkgr/pool.html#ProgressEvent">pool: object ProgressEvent</a></li>
+          </ul></dd>
+<dt><a name="ProgressKind" href="#ProgressKind"><span>ProgressKind:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="pool: enum ProgressKind" href="datpkgr/pool.html#ProgressKind">pool: enum ProgressKind</a></li>
           </ul></dd>
 <dt><a name="pruneOrphans" href="#pruneOrphans"><span>pruneOrphans:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -484,6 +658,10 @@
 <dt><a name="prunePackages" href="#prunePackages"><span>prunePackages:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="operations: proc prunePackages(cfg: DatpkgrConfig; verbose = true)" href="datpkgr/operations.html#prunePackages%2CDatpkgrConfig">operations: proc prunePackages(cfg: DatpkgrConfig; verbose = true)</a></li>
+          </ul></dd>
+<dt><a name="readDevelopManifest" href="#readDevelopManifest"><span>readDevelopManifest:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="store: proc readDevelopManifest(cfg: DatpkgrConfig; name: string): Option[Manifest]" href="datpkgr/store.html#readDevelopManifest%2CDatpkgrConfig%2Cstring">store: proc readDevelopManifest(cfg: DatpkgrConfig; name: string): Option[Manifest]</a></li>
           </ul></dd>
 <dt><a name="readManifestContent" href="#readManifestContent"><span>readManifestContent:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -510,6 +688,12 @@
 <dt><a name="refreshRemoteTags" href="#refreshRemoteTags"><span>refreshRemoteTags:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="git: proc refreshRemoteTags(cfg: DatpkgrConfig; dest, url: string; nonInteractive = false): bool" href="datpkgr/git.html#refreshRemoteTags%2CDatpkgrConfig%2Cstring%2Cstring">git: proc refreshRemoteTags(cfg: DatpkgrConfig; dest, url: string; nonInteractive = false): bool</a></li>
+          </ul></dd>
+<dt><a name="refreshRemoteTagsRaw" href="#refreshRemoteTagsRaw"><span>refreshRemoteTagsRaw:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="git: proc refreshRemoteTagsRaw(dest, url: string; nonInteractive = false;
+                     allowSubmodules = false): bool" href="datpkgr/git.html#refreshRemoteTagsRaw%2Cstring%2Cstring">git: proc refreshRemoteTagsRaw(dest, url: string; nonInteractive = false;
+                     allowSubmodules = false): bool</a></li>
           </ul></dd>
 <dt><a name="refreshSource" href="#refreshSource"><span>refreshSource:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -555,6 +739,28 @@
 <li><a class="reference external"
           data-doc-search-tag="resolver: object ResolverError" href="datpkgr/resolver.html#ResolverError">resolver: object ResolverError</a></li>
           </ul></dd>
+<dt><a name="resolveRootMeta" href="#resolveRootMeta"><span>resolveRootMeta:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc resolveRootMeta(cfg: DatpkgrConfig; name, sourceFilter: string): Option[PkgRef]" href="datpkgr/operations.html#resolveRootMeta%2CDatpkgrConfig%2Cstring%2Cstring">operations: proc resolveRootMeta(cfg: DatpkgrConfig; name, sourceFilter: string): Option[PkgRef]</a></li>
+          </ul></dd>
+<dt><a name="runPool" href="#runPool"><span>runPool:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="pool: proc runPool[J, R](jobs: seq[J];
+              worker: proc (job: J; progress: Chan[ProgressEvent]): R {.gcsafe.}): tuple[
+    results: seq[R], progress: seq[ProgressEvent]]" href="datpkgr/pool.html#runPool%2Cseq%5BJ%5D%2Cproc%28J%2CChan%5BProgressEvent%5D%29">pool: proc runPool[J, R](jobs: seq[J];
+              worker: proc (job: J; progress: Chan[ProgressEvent]): R {.gcsafe.}): tuple[
+    results: seq[R], progress: seq[ProgressEvent]]</a></li>
+          </ul></dd>
+<dt><a name="runPoolStreaming" href="#runPoolStreaming"><span>runPoolStreaming:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="pool: proc runPoolStreaming[J, R](jobs: seq[J]; worker: proc (job: J;
+    progress: Chan[ProgressEvent]): R {.gcsafe.};
+                       onResult: proc (idx: int; res: R)): tuple[
+    results: seq[R], progress: seq[ProgressEvent]]" href="datpkgr/pool.html#runPoolStreaming%2Cseq%5BJ%5D%2Cproc%28J%2CChan%5BProgressEvent%5D%29%2Cproc%28int%2CR%29">pool: proc runPoolStreaming[J, R](jobs: seq[J]; worker: proc (job: J;
+    progress: Chan[ProgressEvent]): R {.gcsafe.};
+                       onResult: proc (idx: int; res: R)): tuple[
+    results: seq[R], progress: seq[ProgressEvent]]</a></li>
+          </ul></dd>
 <dt><a name="safeRemoveDir" href="#safeRemoveDir"><span>safeRemoveDir:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="config: proc safeRemoveDir(cfg: DatpkgrConfig; dir: string)" href="datpkgr/config.html#safeRemoveDir%2CDatpkgrConfig%2Cstring">config: proc safeRemoveDir(cfg: DatpkgrConfig; dir: string)</a></li>
@@ -583,6 +789,10 @@
 <li><a class="reference external"
           data-doc-search-tag="store: proc seedPackagesTableDefault(cfg: DatpkgrConfig; registryPackages: JsonNode): int" href="datpkgr/store.html#seedPackagesTableDefault%2CDatpkgrConfig%2CJsonNode">store: proc seedPackagesTableDefault(cfg: DatpkgrConfig; registryPackages: JsonNode): int</a></li>
           </ul></dd>
+<dt><a name="setupDatpkgrStores" href="#setupDatpkgrStores"><span>setupDatpkgrStores:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="store: proc setupDatpkgrStores(cfg: DatpkgrConfig; hasDatabase: bool)" href="datpkgr/store.html#setupDatpkgrStores%2CDatpkgrConfig%2Cbool">store: proc setupDatpkgrStores(cfg: DatpkgrConfig; hasDatabase: bool)</a></li>
+          </ul></dd>
 <dt><a name="SoftViolation" href="#SoftViolation"><span>SoftViolation:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="resolver: object SoftViolation" href="datpkgr/resolver.html#SoftViolation">resolver: object SoftViolation</a></li>
@@ -599,6 +809,30 @@
 <li><a class="reference external"
           data-doc-search-tag="config: proc sourcesPath(cfg: DatpkgrConfig): string" href="datpkgr/config.html#sourcesPath%2CDatpkgrConfig">config: proc sourcesPath(cfg: DatpkgrConfig): string</a></li>
           </ul></dd>
+<dt><a name="sshFailedHosts" href="#sshFailedHosts"><span>sshFailedHosts:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="git: var sshFailedHosts" href="datpkgr/git.html#sshFailedHosts">git: var sshFailedHosts</a></li>
+          </ul></dd>
+<dt><a name="sshFailedHostsLock" href="#sshFailedHostsLock"><span>sshFailedHostsLock:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="git: var sshFailedHostsLock" href="datpkgr/git.html#sshFailedHostsLock">git: var sshFailedHostsLock</a></li>
+          </ul></dd>
+<dt><a name="sshHostOf" href="#sshHostOf"><span>sshHostOf:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="git: proc sshHostOf(url: string): string" href="datpkgr/git.html#sshHostOf%2Cstring">git: proc sshHostOf(url: string): string</a></li>
+          </ul></dd>
+<dt><a name="sshKnownBad" href="#sshKnownBad"><span>sshKnownBad:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="git: proc sshKnownBad(host: string): bool" href="datpkgr/git.html#sshKnownBad%2Cstring">git: proc sshKnownBad(host: string): bool</a></li>
+          </ul></dd>
+<dt><a name="TagFetchJob" href="#TagFetchJob"><span>TagFetchJob:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="versions: tuple TagFetchJob" href="datpkgr/versions.html#TagFetchJob">versions: tuple TagFetchJob</a></li>
+          </ul></dd>
+<dt><a name="TagFetchRes" href="#TagFetchRes"><span>TagFetchRes:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="versions: tuple TagFetchRes" href="datpkgr/versions.html#TagFetchRes">versions: tuple TagFetchRes</a></li>
+          </ul></dd>
 <dt><a name="tagForVersion" href="#tagForVersion"><span>tagForVersion:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="versions: proc tagForVersion(cfg: DatpkgrConfig; dest: string; version: string): string" href="datpkgr/versions.html#tagForVersion%2CDatpkgrConfig%2Cstring%2Cstring">versions: proc tagForVersion(cfg: DatpkgrConfig; dest: string; version: string): string</a></li>
@@ -608,6 +842,10 @@
 <dt><a name="toGitSshUrl" href="#toGitSshUrl"><span>toGitSshUrl:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="git: proc toGitSshUrl(url: string): string" href="datpkgr/git.html#toGitSshUrl%2Cstring">git: proc toGitSshUrl(url: string): string</a></li>
+          </ul></dd>
+<dt><a name="toolchainDep" href="#toolchainDep"><span>toolchainDep:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="store: proc toolchainDep(cfg: DatpkgrConfig; d: PkgDependency): bool" href="datpkgr/store.html#toolchainDep%2CDatpkgrConfig%2CPkgDependency">store: proc toolchainDep(cfg: DatpkgrConfig; d: PkgDependency): bool</a></li>
           </ul></dd>
 <dt><a name="uninstallPackage" href="#uninstallPackage"><span>uninstallPackage:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -627,9 +865,45 @@
 <li><a class="reference external"
           data-doc-search-tag="operations: proc updateAllPackages(cfg: DatpkgrConfig; verbose = false; exePath = &quot;&quot;): bool" href="datpkgr/operations.html#updateAllPackages%2CDatpkgrConfig%2Cstring">operations: proc updateAllPackages(cfg: DatpkgrConfig; verbose = false; exePath = &quot;&quot;): bool</a></li>
           </ul></dd>
+<dt><a name="UpdateItem" href="#UpdateItem"><span>UpdateItem:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: tuple UpdateItem" href="datpkgr/operations.html#UpdateItem">operations: tuple UpdateItem</a></li>
+          </ul></dd>
 <dt><a name="updatePackage" href="#updatePackage"><span>updatePackage:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="operations: proc updatePackage(cfg: DatpkgrConfig; name: string; verbose = false): bool" href="datpkgr/operations.html#updatePackage%2CDatpkgrConfig%2Cstring">operations: proc updatePackage(cfg: DatpkgrConfig; name: string; verbose = false): bool</a></li>
+          </ul></dd>
+<dt><a name="updatePackageDetailed" href="#updatePackageDetailed"><span>updatePackageDetailed:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc updatePackageDetailed(cfg: DatpkgrConfig; name: string; verbose = false): tuple[
+    ok: bool, updated: seq[UpdateItem]]" href="datpkgr/operations.html#updatePackageDetailed%2CDatpkgrConfig%2Cstring">operations: proc updatePackageDetailed(cfg: DatpkgrConfig; name: string; verbose = false): tuple[
+    ok: bool, updated: seq[UpdateItem]]</a></li>
+          </ul></dd>
+<dt><a name="updatePackages" href="#updatePackages"><span>updatePackages:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc updatePackages(cfg: DatpkgrConfig; names: seq[string]; verbose = false): bool" href="datpkgr/operations.html#updatePackages%2CDatpkgrConfig%2Cseq%5Bstring%5D">operations: proc updatePackages(cfg: DatpkgrConfig; names: seq[string]; verbose = false): bool</a></li>
+          </ul></dd>
+<dt><a name="updatePackagesDetailed" href="#updatePackagesDetailed"><span>updatePackagesDetailed:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc updatePackagesDetailed(cfg: DatpkgrConfig; names: seq[string]; verbose = false): tuple[
+    ok: bool, updated: seq[UpdateItem]]" href="datpkgr/operations.html#updatePackagesDetailed%2CDatpkgrConfig%2Cseq%5Bstring%5D">operations: proc updatePackagesDetailed(cfg: DatpkgrConfig; names: seq[string]; verbose = false): tuple[
+    ok: bool, updated: seq[UpdateItem]]</a></li>
+          </ul></dd>
+<dt><a name="updateScopeNames" href="#updateScopeNames"><span>updateScopeNames:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc updateScopeNames(cfg: DatpkgrConfig; directs: seq[string]): seq[string]" href="datpkgr/operations.html#updateScopeNames%2CDatpkgrConfig%2Cseq%5Bstring%5D">operations: proc updateScopeNames(cfg: DatpkgrConfig; directs: seq[string]): seq[string]</a></li>
+          </ul></dd>
+<dt><a name="updateSubmodules" href="#updateSubmodules"><span>updateSubmodules:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="git: proc updateSubmodules(cfg: DatpkgrConfig; dest: string): bool" href="datpkgr/git.html#updateSubmodules%2CDatpkgrConfig%2Cstring">git: proc updateSubmodules(cfg: DatpkgrConfig; dest: string): bool</a></li>
+          </ul></dd>
+<dt><a name="updateSubmodulesRaw" href="#updateSubmodulesRaw"><span>updateSubmodulesRaw:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="git: proc updateSubmodulesRaw(dest: string; allowSubmodules = false): bool" href="datpkgr/git.html#updateSubmodulesRaw%2Cstring">git: proc updateSubmodulesRaw(dest: string; allowSubmodules = false): bool</a></li>
+          </ul></dd>
+<dt><a name="urlDepName" href="#urlDepName"><span>urlDepName:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="operations: proc urlDepName(cfg: DatpkgrConfig; d: PkgDependency): string" href="datpkgr/operations.html#urlDepName%2CDatpkgrConfig%2CPkgDependency">operations: proc urlDepName(cfg: DatpkgrConfig; d: PkgDependency): string</a></li>
           </ul></dd>
 <dt><a name="vcAny" href="#vcAny"><span>vcAny:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -693,7 +967,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-09-10 08:37:18 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-10-29 23:08:40 UTC</small>
       </div>
     </div>
   </div>

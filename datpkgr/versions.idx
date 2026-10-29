@@ -1,19 +1,24 @@
 nimTitle	versions	datpkgr/versions.html	module datpkgr/versions		0
-nim	DiscoveredVersion	datpkgr/versions.html#DiscoveredVersion	object DiscoveredVersion		22
-nim	DepEntry	datpkgr/versions.html#DepEntry	tuple DepEntry		26
-nim	MaxConcurrentGit	datpkgr/versions.html#MaxConcurrentGit	const MaxConcurrentGit		28
-nim	findLocalTags	datpkgr/versions.html#findLocalTags,DatpkgrConfig,string	proc findLocalTags(cfg: DatpkgrConfig; dest: string): seq[string]		57
-nim	tagForVersion	datpkgr/versions.html#tagForVersion,string,string	proc tagForVersion(dest: string; version: string): string		130
-nim	tagForVersion	datpkgr/versions.html#tagForVersion,DatpkgrConfig,string,string	proc tagForVersion(cfg: DatpkgrConfig; dest: string; version: string): string		145
-nim	hasLocalSemverTags	datpkgr/versions.html#hasLocalSemverTags,DatpkgrConfig,string	proc hasLocalSemverTags(cfg: DatpkgrConfig; name: string): bool		160
-nim	installCleanCopy	datpkgr/versions.html#installCleanCopy,string,string,Manifest	proc installCleanCopy(cacheDir, verDir: string; m: Manifest)		189
-nim	installCleanCopy	datpkgr/versions.html#installCleanCopy,DatpkgrConfig,string,string,Manifest	proc installCleanCopy(cfg: DatpkgrConfig; cacheDir, verDir: string; m: Manifest)		242
-nim	cachedVersions	datpkgr/versions.html#cachedVersions,DatpkgrConfig,string	proc cachedVersions(cfg: DatpkgrConfig; name: string): seq[DiscoveredVersion]		268
-nim	discoverVersions	datpkgr/versions.html#discoverVersions,DatpkgrConfig,string,string	proc discoverVersions(cfg: DatpkgrConfig; name, url: string; refresh = false;\n                 cloneOnMiss = true): seq[DiscoveredVersion]		302
-nim	discoverVersionsBatch	datpkgr/versions.html#discoverVersionsBatch,DatpkgrConfig,openArray[PkgRef],proc(string,int,bool)	proc discoverVersionsBatch(cfg: DatpkgrConfig; pkgs: openArray[PkgRef];\n                      refresh = false; onDone: proc (name: string;\n    versions: int; cached: bool) = nil): Table[string, seq[DiscoveredVersion]]		386
-nim	headVersion	datpkgr/versions.html#headVersion,DatpkgrConfig,string	proc headVersion(cfg: DatpkgrConfig; name: string): Version		430
-nim	readManifestContent	datpkgr/versions.html#readManifestContent,DatpkgrConfig,string,string,string	proc readManifestContent(cfg: DatpkgrConfig; dest, name, version: string): string		589
-nim	readManifestContentGeneric	datpkgr/versions.html#readManifestContentGeneric,DatpkgrConfig,string,string,string	proc readManifestContentGeneric(cfg: DatpkgrConfig; dest, name, version: string): string		611
-nim	getDeps	datpkgr/versions.html#getDeps,DatpkgrConfig,string,string,seq[string],string	proc getDeps(cfg: DatpkgrConfig; name, version: string; features: seq[string] = @[];\n        refresh = false; url = ""): seq[PkgDependency]		614
-nimgrp	tagforversion	datpkgr/versions.html#tagForVersion-procs-all	proc		130
-nimgrp	installcleancopy	datpkgr/versions.html#installCleanCopy-procs-all	proc		189
+nim	DiscoveredVersion	datpkgr/versions.html#DiscoveredVersion	object DiscoveredVersion		23
+nim	DepEntry	datpkgr/versions.html#DepEntry	tuple DepEntry		27
+nim	MaxConcurrentGit	datpkgr/versions.html#MaxConcurrentGit	const MaxConcurrentGit		29
+nim	findLocalTags	datpkgr/versions.html#findLocalTags,DatpkgrConfig,string	proc findLocalTags(cfg: DatpkgrConfig; dest: string): seq[string]		58
+nim	tagForVersion	datpkgr/versions.html#tagForVersion,string,string	proc tagForVersion(dest: string; version: string): string		131
+nim	tagForVersion	datpkgr/versions.html#tagForVersion,DatpkgrConfig,string,string	proc tagForVersion(cfg: DatpkgrConfig; dest: string; version: string): string		146
+nim	hasLocalSemverTags	datpkgr/versions.html#hasLocalSemverTags,DatpkgrConfig,string	proc hasLocalSemverTags(cfg: DatpkgrConfig; name: string): bool		161
+nim	installCleanCopy	datpkgr/versions.html#installCleanCopy,string,string,Manifest	proc installCleanCopy(cacheDir, verDir: string; m: Manifest)		190
+nim	installCleanCopy	datpkgr/versions.html#installCleanCopy,DatpkgrConfig,string,string,Manifest	proc installCleanCopy(cfg: DatpkgrConfig; cacheDir, verDir: string; m: Manifest)		243
+nim	cachedVersions	datpkgr/versions.html#cachedVersions,DatpkgrConfig,string	proc cachedVersions(cfg: DatpkgrConfig; name: string): seq[DiscoveredVersion]		269
+nim	discoverVersions	datpkgr/versions.html#discoverVersions,DatpkgrConfig,string,string	proc discoverVersions(cfg: DatpkgrConfig; name, url: string; refresh = false;\n                 cloneOnMiss = true): seq[DiscoveredVersion]		303
+nim	TagFetchJob	datpkgr/versions.html#TagFetchJob	tuple TagFetchJob		360
+nim	TagFetchRes	datpkgr/versions.html#TagFetchRes	tuple TagFetchRes		362
+nim	fetchTagsJob	datpkgr/versions.html#fetchTagsJob,TagFetchJob,Chan[ProgressEvent]	proc fetchTagsJob(job: TagFetchJob; progress: Chan[ProgressEvent]): TagFetchRes		364
+nim	installedVersionsForReuse	datpkgr/versions.html#installedVersionsForReuse,DatpkgrConfig,string	proc installedVersionsForReuse(cfg: DatpkgrConfig; name: string): seq[\n    DiscoveredVersion]		392
+nim	isTaglessCached	datpkgr/versions.html#isTaglessCached,DatpkgrConfig,string	proc isTaglessCached(cfg: DatpkgrConfig; name: string): bool		425
+nim	discoverVersionsBatch	datpkgr/versions.html#discoverVersionsBatch,DatpkgrConfig,openArray[PkgRef],proc(string,int,bool)	proc discoverVersionsBatch(cfg: DatpkgrConfig; pkgs: openArray[PkgRef];\n                      refresh = false; onDone: proc (name: string;\n    versions: int; cached: bool) = nil): Table[string, seq[DiscoveredVersion]]		447
+nim	headVersion	datpkgr/versions.html#headVersion,DatpkgrConfig,string	proc headVersion(cfg: DatpkgrConfig; name: string): Version		561
+nim	readManifestContent	datpkgr/versions.html#readManifestContent,DatpkgrConfig,string,string,string	proc readManifestContent(cfg: DatpkgrConfig; dest, name, version: string): string		761
+nim	readManifestContentGeneric	datpkgr/versions.html#readManifestContentGeneric,DatpkgrConfig,string,string,string	proc readManifestContentGeneric(cfg: DatpkgrConfig; dest, name, version: string): string		809
+nim	getDeps	datpkgr/versions.html#getDeps,DatpkgrConfig,string,string,seq[string],string	proc getDeps(cfg: DatpkgrConfig; name, version: string; features: seq[string] = @[];\n        refresh = false; url = ""): seq[PkgDependency]		836
+nimgrp	tagforversion	datpkgr/versions.html#tagForVersion-procs-all	proc		131
+nimgrp	installcleancopy	datpkgr/versions.html#installCleanCopy-procs-all	proc		190

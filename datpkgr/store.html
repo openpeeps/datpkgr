@@ -61,12 +61,24 @@
   <details open>
     <summary><a class="reference reference-toplevel" href="#12" id="62">Procs</a></summary>
     <ul class="simple simple-toc-section">
-      <ul class="simple nested-toc-section">debugLog
+      <ul class="simple nested-toc-section">canonicalNameForAlias
+  <li><a class="reference" href="#canonicalNameForAlias%2CDatpkgrConfig%2Cstring" title="canonicalNameForAlias(cfg: DatpkgrConfig; name: string): string">canonicalNameForAlias(cfg: DatpkgrConfig; name: string): string</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">closeDatpkgr
+  <li><a class="reference" href="#closeDatpkgr%2CDatpkgrConfig" title="closeDatpkgr(cfg: DatpkgrConfig)">closeDatpkgr(cfg: DatpkgrConfig)</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">debugLog
   <li><a class="reference" href="#debugLog%2CDatpkgrConfig%2Cstring" title="debugLog(cfg: DatpkgrConfig; msg: string)">debugLog(cfg: DatpkgrConfig; msg: string)</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">ensureSourcesFile
   <li><a class="reference" href="#ensureSourcesFile%2CDatpkgrConfig" title="ensureSourcesFile(cfg: DatpkgrConfig)">ensureSourcesFile(cfg: DatpkgrConfig)</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">expandForgeAlias
+  <li><a class="reference" href="#expandForgeAlias%2Cstring" title="expandForgeAlias(s: string): string">expandForgeAlias(s: string): string</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">fetchAllPkgMetas
@@ -87,12 +99,36 @@
   <li><a class="reference" href="#isDevelopAvailable%2CDatpkgrConfig%2Cstring" title="isDevelopAvailable(cfg: DatpkgrConfig; pkgName: string): bool">isDevelopAvailable(cfg: DatpkgrConfig; pkgName: string): bool</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">isForgeAliasShape
+  <li><a class="reference" href="#isForgeAliasShape%2Cstring" title="isForgeAliasShape(s: string): bool">isForgeAliasShape(s: string): bool</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">isValidSourceName
   <li><a class="reference" href="#isValidSourceName%2Cstring" title="isValidSourceName(s: string): bool">isValidSourceName(s: string): bool</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">loadSources
   <li><a class="reference" href="#loadSources%2CDatpkgrConfig" title="loadSources(cfg: DatpkgrConfig): seq[Source]">loadSources(cfg: DatpkgrConfig): seq[Source]</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">normalizeRepoUrl
+  <li><a class="reference" href="#normalizeRepoUrl%2Cstring" title="normalizeRepoUrl(url: string): string">normalizeRepoUrl(url: string): string</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">openDatpkgrStores
+  <li><a class="reference" href="#openDatpkgrStores%2CDatpkgrConfig" title="openDatpkgrStores(cfg: DatpkgrConfig)">openDatpkgrStores(cfg: DatpkgrConfig)</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">pkgNameForUrl
+  <li><a class="reference" href="#pkgNameForUrl%2CDatpkgrConfig%2Cstring%2Cstring" title="pkgNameForUrl(cfg: DatpkgrConfig; url: string; sourceFilter: string = &quot;&quot;): string">pkgNameForUrl(cfg: DatpkgrConfig; url: string; sourceFilter: string = &quot;&quot;): string</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">pkgNameFromUrl
+  <li><a class="reference" href="#pkgNameFromUrl%2Cstring" title="pkgNameFromUrl(url: string): string">pkgNameFromUrl(url: string): string</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">readDevelopManifest
+  <li><a class="reference" href="#readDevelopManifest%2CDatpkgrConfig%2Cstring" title="readDevelopManifest(cfg: DatpkgrConfig; name: string): Option[Manifest]">readDevelopManifest(cfg: DatpkgrConfig; name: string): Option[Manifest]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">refreshAllSources
@@ -123,8 +159,16 @@
   <li><a class="reference" href="#seedPackagesTableDefault%2CDatpkgrConfig%2CJsonNode" title="seedPackagesTableDefault(cfg: DatpkgrConfig; registryPackages: JsonNode): int">seedPackagesTableDefault(cfg: DatpkgrConfig; registryPackages: JsonNode): int</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">setupDatpkgrStores
+  <li><a class="reference" href="#setupDatpkgrStores%2CDatpkgrConfig%2Cbool" title="setupDatpkgrStores(cfg: DatpkgrConfig; hasDatabase: bool)">setupDatpkgrStores(cfg: DatpkgrConfig; hasDatabase: bool)</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">sourceCachePath
   <li><a class="reference" href="#sourceCachePath%2CDatpkgrConfig%2Cstring" title="sourceCachePath(cfg: DatpkgrConfig; name: string): string">sourceCachePath(cfg: DatpkgrConfig; name: string): string</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">toolchainDep
+  <li><a class="reference" href="#toolchainDep%2CDatpkgrConfig%2CPkgDependency" title="toolchainDep(cfg: DatpkgrConfig; d: PkgDependency): bool">toolchainDep(cfg: DatpkgrConfig; d: PkgDependency): bool</a></li>
 
 </ul>
 
@@ -161,7 +205,34 @@
 <div class="section" id="12">
   <h1><a class="toc-backref" href="#12">Procs</a></h1>
   <dl class="item">
-    <div id="debugLog-procs-all">
+    <div id="canonicalNameForAlias-procs-all">
+  <div id="canonicalNameForAlias,DatpkgrConfig,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#canonicalNameForAlias%2CDatpkgrConfig%2Cstring"><span class="Identifier">canonicalNameForAlias</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Resolve a forge-shorthand name (<tt class="docutils literal"><span class="pre"><span class="Identifier">gh</span><span class="Punctuation">:</span><span class="Identifier">user</span><span class="Operator">/</span><span class="Identifier">repo</span></span></tt>) left behind in rows cached or recorded before parsers expanded shorthand (or by a parser that never did). Registry first, then the cached checkout's manifest, else the repo basename — offline-safe, never clones. Returns &quot;&quot; when <tt class="docutils literal"><span class="pre"><span class="Identifier">name</span></span></tt> is not alias-shaped or nothing resolves.
+    
+  </dd>
+</div>
+
+</div>
+<div id="closeDatpkgr-procs-all">
+  <div id="closeDatpkgr,DatpkgrConfig">
+  <dt><pre><span class="Keyword">proc</span> <a href="#closeDatpkgr%2CDatpkgrConfig"><span class="Identifier">closeDatpkgr</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span>
+                                        <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="debugLog-procs-all">
   <div id="debugLog,DatpkgrConfig,string">
   <dt><pre><span class="Keyword">proc</span> <a href="#debugLog%2CDatpkgrConfig%2Cstring"><span class="Identifier">debugLog</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">msg</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span>
     <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
@@ -185,13 +256,23 @@
 </div>
 
 </div>
+<div id="expandForgeAlias-procs-all">
+  <div id="expandForgeAlias,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#expandForgeAlias%2Cstring"><span class="Identifier">expandForgeAlias</span></a><span class="Other">(</span><span class="Identifier">s</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Expand <tt class="docutils literal"><span class="pre"><span class="Identifier">alias</span><span class="Punctuation">:</span><span class="Identifier">user</span><span class="Operator">/</span><span class="Identifier">repo</span></span></tt> shorthand to a canonical https URL. Known aliases: <tt class="docutils literal"><span class="pre"><span class="Identifier">github</span></span></tt>/<tt class="docutils literal"><span class="pre"><span class="Identifier">gh</span></span></tt>, <tt class="docutils literal"><span class="pre"><span class="Identifier">gitlab</span></span></tt>/<tt class="docutils literal"><span class="pre"><span class="Identifier">gl</span></span></tt>, <tt class="docutils literal"><span class="pre"><span class="Identifier">codeberg</span></span></tt>/<tt class="docutils literal"><span class="pre"><span class="Identifier">cb</span></span></tt>/<tt class="docutils literal"><span class="pre"><span class="Identifier">cberg</span></span></tt>, <tt class="docutils literal"><span class="pre"><span class="Identifier">sourcehut</span></span></tt>/<tt class="docutils literal"><span class="pre"><span class="Identifier">srht</span></span></tt> (a missing <tt class="docutils literal"><span class="pre"><span class="Operator">~</span></span></tt> is auto-prefixed for sourcehut, as in nimble). Raises ValueError on unknown aliases or malformed input.
+    
+  </dd>
+</div>
+
+</div>
 <div id="fetchAllPkgMetas-procs-all">
   <div id="fetchAllPkgMetas,DatpkgrConfig,string">
-  <dt><pre><span class="Keyword">proc</span> <a href="#fetchAllPkgMetas%2CDatpkgrConfig%2Cstring"><span class="Identifier">fetchAllPkgMetas</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">pkgName</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="types.html#PkgRef"><span class="Identifier">PkgRef</span></a><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span>
-    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#fetchAllPkgMetas%2CDatpkgrConfig%2Cstring"><span class="Identifier">fetchAllPkgMetas</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">pkgName</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="types.html#PkgRef"><span class="Identifier">PkgRef</span></a><span class="Other">]</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     
@@ -203,11 +284,9 @@
 <div id="fetchPkgMeta-procs-all">
   <div id="fetchPkgMeta,DatpkgrConfig,string,string">
   <dt><pre><span class="Keyword">proc</span> <a href="#fetchPkgMeta%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">fetchPkgMeta</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">pkgName</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">sourceFilter</span><span class="Other">:</span> <span class="Identifier">string</span> <span class="Other">=</span> <span class="StringLit">&quot;&quot;</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">Option</span><span class="Other">[</span>
-    <a href="types.html#PkgRef"><span class="Identifier">PkgRef</span></a><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span>
-                       <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span>
-                       <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span>
-              <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <a href="types.html#PkgRef"><span class="Identifier">PkgRef</span></a><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
+    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span>
+    <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     
@@ -218,11 +297,9 @@
 </div>
 <div id="initDatpkgr-procs-all">
   <div id="initDatpkgr,DatpkgrConfig">
-  <dt><pre><span class="Keyword">proc</span> <a href="#initDatpkgr%2CDatpkgrConfig"><span class="Identifier">initDatpkgr</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span>
-    <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span>
-    <span class="Identifier">StorageError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span>
-    <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#initDatpkgr%2CDatpkgrConfig"><span class="Identifier">initDatpkgr</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span>
+                                       <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span>
+                                       <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     
@@ -238,6 +315,17 @@
   <dd>
     
     True if pkgName is available as develop (symlink). Driver-only to avoid circular import with install.
+    
+  </dd>
+</div>
+
+</div>
+<div id="isForgeAliasShape-procs-all">
+  <div id="isForgeAliasShape,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#isForgeAliasShape%2Cstring"><span class="Identifier">isForgeAliasShape</span></a><span class="Other">(</span><span class="Identifier">s</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    True when <tt class="docutils literal"><span class="pre"><span class="Identifier">s</span></span></tt> looks like <tt class="docutils literal"><span class="pre"><span class="Identifier">alias</span><span class="Punctuation">:</span><span class="Identifier">path</span></span></tt> shorthand: exactly one colon, no <tt class="docutils literal"><span class="pre"><span class="Punctuation">:</span><span class="Operator">//</span></span></tt>, and no <tt class="docutils literal"><span class="pre"><span class="Operator">@</span></span></tt> before the colon (scp-like <tt class="docutils literal"><span class="pre"><span class="Identifier">user</span><span class="Operator">@</span><span class="Identifier">host</span><span class="Punctuation">:</span><span class="Identifier">path</span></span></tt> is a URL, not an alias — this ordering guard is what keeps the two apart).
     
   </dd>
 </div>
@@ -262,6 +350,73 @@
   <dd>
     
     
+    
+  </dd>
+</div>
+
+</div>
+<div id="normalizeRepoUrl-procs-all">
+  <div id="normalizeRepoUrl,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#normalizeRepoUrl%2Cstring"><span class="Identifier">normalizeRepoUrl</span></a><span class="Other">(</span><span class="Identifier">url</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Reduce a repository URL to a comparable key: no scheme, no <tt class="docutils literal"><span class="pre"><span class="Operator">.</span><span class="Identifier">git</span></span></tt>, no trailing slash, lowercased. A registry stores one canonical spelling while a manifest may use another (<tt class="docutils literal"><span class="pre"><span class="Identifier">git</span><span class="Operator">+</span><span class="Identifier">https</span><span class="Punctuation">:</span><span class="Operator">//</span></span></tt>, <tt class="docutils literal"><span class="pre"><span class="Identifier">ssh</span><span class="Punctuation">:</span><span class="Operator">//</span></span></tt>, a bare host, an explicit <tt class="docutils literal"><span class="pre"><span class="Operator">.</span><span class="Identifier">git</span></span></tt>), and those all name the same repository.
+    
+  </dd>
+</div>
+
+</div>
+<div id="openDatpkgrStores-procs-all">
+  <div id="openDatpkgrStores,DatpkgrConfig">
+  <dt><pre><span class="Keyword">proc</span> <a href="#openDatpkgrStores%2CDatpkgrConfig"><span class="Identifier">openDatpkgrStores</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span>
+    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">FileLockError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">FileLockBusyError</span><span class="Other">,</span>
+    <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">SignalError</span><span class="Other">,</span> <span class="Identifier">ResourceExhaustedError</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="pkgNameForUrl-procs-all">
+  <div id="pkgNameForUrl,DatpkgrConfig,string,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#pkgNameForUrl%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">pkgNameForUrl</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">url</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">sourceFilter</span><span class="Other">:</span> <span class="Identifier">string</span> <span class="Other">=</span> <span class="StringLit">&quot;&quot;</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    <p>The registry package name for a repository URL, or &quot;&quot; if the registry does not know that URL.</p>
+<p>This exists because a repository and the package inside it need not share a name: <tt class="docutils literal"><span class="pre"><span class="Identifier">github</span><span class="Operator">.</span><span class="Identifier">com</span><span class="Operator">/</span><span class="Identifier">supranim</span><span class="Operator">/</span><span class="Identifier">tasks</span></span></tt> ships <tt class="docutils literal"><span class="pre"><span class="Identifier">supranim_tasks</span><span class="Operator">.</span><span class="Identifier">nimble</span></span></tt>. Taking the repository's basename as the package name gets that case wrong, and it fails late and confusingly — the install itself succeeds under the real name, so the caller's own dependency list is left holding a name nothing is recorded under and it goes on to look that name up in the registry.</p>
+
+    
+  </dd>
+</div>
+
+</div>
+<div id="pkgNameFromUrl-procs-all">
+  <div id="pkgNameFromUrl,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#pkgNameFromUrl%2Cstring"><span class="Identifier">pkgNameFromUrl</span></a><span class="Other">(</span><span class="Identifier">url</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="readDevelopManifest-procs-all">
+  <div id="readDevelopManifest,DatpkgrConfig,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#readDevelopManifest%2CDatpkgrConfig%2Cstring"><span class="Identifier">readDevelopManifest</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">Option</span><span class="Other">[</span><a href="types.html#Manifest"><span class="Identifier">Manifest</span></a><span class="Other">]</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    <p>The develop checkout's manifest, read right now. None when there is no checkout or its manifest cannot be read or parsed.</p>
+<p>Lives here because both <tt class="docutils literal"><span class="pre"><span class="Identifier">versions</span></span></tt> (resolving a develop package) and <tt class="docutils literal"><span class="pre"><span class="Identifier">install</span></span></tt> (walking the closure) need it: <tt class="docutils literal"><span class="pre"><span class="Identifier">versions</span></span></tt> already imports <tt class="docutils literal"><span class="pre"><span class="Identifier">install</span></span></tt>, so the reverse import would be circular.</p>
+
     
   </dd>
 </div>
@@ -297,8 +452,8 @@
 </div>
 <div id="refreshSource-procs-all">
   <div id="refreshSource,DatpkgrConfig,string">
-  <dt><pre><span class="Keyword">proc</span> <a href="#refreshSource%2CDatpkgrConfig%2Cstring"><span class="Identifier">refreshSource</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">sourceName</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.
-    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
+  <dt><pre><span class="Keyword">proc</span> <a href="#refreshSource%2CDatpkgrConfig%2Cstring"><span class="Identifier">refreshSource</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">sourceName</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
+    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
     <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
     <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
@@ -341,7 +496,7 @@
     <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
-    
+    Caller must hold a <tt class="docutils literal"><span class="pre"><span class="Identifier">withDatpkgrDB</span></span></tt> scope (setup, refreshSource) or a bare <tt class="docutils literal"><span class="pre"><span class="Identifier">initDatpkgr</span></span></tt> open (tests) — kept unscoped because it is defined before the template and all call sites already guarantee openness.
     
   </dd>
 </div>
@@ -352,6 +507,22 @@
   <dt><pre><span class="Keyword">proc</span> <a href="#seedPackagesTableDefault%2CDatpkgrConfig%2CJsonNode"><span class="Identifier">seedPackagesTableDefault</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">registryPackages</span><span class="Other">:</span> <span class="Identifier">JsonNode</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">int</span> {.
     <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span>
                                 <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="setupDatpkgrStores-procs-all">
+  <div id="setupDatpkgrStores,DatpkgrConfig,bool">
+  <dt><pre><span class="Keyword">proc</span> <a href="#setupDatpkgrStores%2CDatpkgrConfig%2Cbool"><span class="Identifier">setupDatpkgrStores</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">hasDatabase</span><span class="Other">:</span> <span class="Identifier">bool</span><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
+    <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span>
+    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span>
+    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span>
+    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span>
     <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
@@ -373,6 +544,18 @@
 </div>
 
 </div>
+<div id="toolchainDep-procs-all">
+  <div id="toolchainDep,DatpkgrConfig,PkgDependency">
+  <dt><pre><span class="Keyword">proc</span> <a href="#toolchainDep%2CDatpkgrConfig%2CPkgDependency"><span class="Identifier">toolchainDep</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">d</span><span class="Other">:</span> <a href="types.html#PkgDependency"><span class="Identifier">PkgDependency</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Whether <tt class="docutils literal"><span class="pre"><span class="Identifier">d</span></span></tt> is the configured toolchain rather than a real dependency.
+    
+  </dd>
+</div>
+
+</div>
 
   </dl>
 </div>
@@ -384,7 +567,7 @@
   <dt><pre><span class="Keyword">template</span> <a href="#withDatpkgrDB.t%2CDatpkgrConfig%2Cuntyped"><span class="Identifier">withDatpkgrDB</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">body</span><span class="Other">:</span> <span class="Identifier">untyped</span><span class="Other">)</span></pre></dt>
   <dd>
     
-    
+    Per-operation scope: opens the stores (acquiring the cross-process locks) on the outermost entry, runs <tt class="docutils literal"><span class="pre"><span class="Identifier">body</span></span></tt>, then checkpoints + closes on the outermost exit — even when <tt class="docutils literal"><span class="pre"><span class="Identifier">body</span></span></tt> raises. Re-entrant: nested scopes share the open stores. Network/filesystem phases must stay outside any scope so other processes can use the databases meanwhile. All DB touches run on the caller's thread (the store isn't thread-safe).
     
   </dd>
 </div>
@@ -400,7 +583,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-09-10 08:37:18 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-10-29 23:08:39 UTC</small>
       </div>
     </div>
   </div>

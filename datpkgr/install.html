@@ -65,6 +65,15 @@
   version*: string
   path*: string
   root*: bool">InstalledRecord</a></li>
+<li><a class="reference" href="#InstalledSnapshot" title="InstalledSnapshot = object
+  records*: Table[string, seq[InstalledRecord]]
+  depsOf*: Table[string, seq[string]] ## Package name -&gt; dependency names recorded on its rows (deduped).
+  depsOfRec*: Table[string, seq[tuple[name, version: string]]] ## &quot;name@version&quot; -&gt; that row's dependency edges, versions unexpanded.
+                                                               ## `pruneOrphans` qualifies these with the install graph; `depsOf` is
+                                                               ## the name-only view used for closure walks.
+  featuresOf*: Table[string, seq[string]] ## Package name -&gt; union of the features its rows were installed with.
+  roots*: seq[string] ## &quot;name@version&quot; keys of rows flagged `root`, in table order. Versioned
+                      ## (not bare names) so a prune seed identifies exactly one install.">InstalledSnapshot</a></li>
 
     </ul>
   </details>
@@ -73,7 +82,9 @@
   <details open>
     <summary><a class="reference reference-toplevel" href="#8" id="58">Vars</a></summary>
     <ul class="simple simple-toc-section">
-      <li><a class="reference" href="#devShadowWarningsEnabled" title="devShadowWarningsEnabled = false">devShadowWarningsEnabled</a></li>
+      <li><a class="reference" href="#devShadowNotes" title="devShadowNotes = initTable(32)">devShadowNotes</a></li>
+<li><a class="reference" href="#devShadowNotesOnly" title="devShadowNotesOnly = false">devShadowNotesOnly</a></li>
+<li><a class="reference" href="#devShadowWarningsEnabled" title="devShadowWarningsEnabled = false">devShadowWarningsEnabled</a></li>
 
     </ul>
   </details>
@@ -86,8 +97,20 @@
   <li><a class="reference" href="#allInstalledPaths%2CDatpkgrConfig" title="allInstalledPaths(cfg: DatpkgrConfig): seq[string]">allInstalledPaths(cfg: DatpkgrConfig): seq[string]</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">closureOnDisk
+  <li><a class="reference" href="#closureOnDisk%2CDatpkgrConfig%2Cstring" title="closureOnDisk(cfg: DatpkgrConfig; name: string): bool">closureOnDisk(cfg: DatpkgrConfig; name: string): bool</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">collectInstalledDepNames
   <li><a class="reference" href="#collectInstalledDepNames%2CDatpkgrConfig%2Cseq%5Bstring%5D" title="collectInstalledDepNames(cfg: DatpkgrConfig; rootNames: seq[string]): seq[string]">collectInstalledDepNames(cfg: DatpkgrConfig; rootNames: seq[string]): seq[string]</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">depNamesFor
+  <li><a class="reference" href="#depNamesFor%2CDatpkgrConfig%2Cstring%2Cseq%5Bstring%5D" title="depNamesFor(cfg: DatpkgrConfig; name: string; recorded: seq[string]): seq[string]">depNamesFor(cfg: DatpkgrConfig; name: string; recorded: seq[string]): seq[string]</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">developRecordPath
+  <li><a class="reference" href="#developRecordPath%2CDatpkgrConfig%2Cstring" title="developRecordPath(cfg: DatpkgrConfig; name: string): string">developRecordPath(cfg: DatpkgrConfig; name: string): string</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">installedCount
@@ -106,12 +129,32 @@
   <li><a class="reference" href="#installedRecords%2CDatpkgrConfig%2Cstring" title="installedRecords(cfg: DatpkgrConfig; name: string): seq[InstalledRecord]">installedRecords(cfg: DatpkgrConfig; name: string): seq[InstalledRecord]</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">installedRecordsAll
+  <li><a class="reference" href="#installedRecordsAll%2CDatpkgrConfig" title="installedRecordsAll(cfg: DatpkgrConfig): Table[string, seq[InstalledRecord]]">installedRecordsAll(cfg: DatpkgrConfig): Table[string, seq[InstalledRecord]]</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">installedRoots
   <li><a class="reference" href="#installedRoots%2CDatpkgrConfig" title="installedRoots(cfg: DatpkgrConfig): seq[string]">installedRoots(cfg: DatpkgrConfig): seq[string]</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">installedSnapshot
+  <li><a class="reference" href="#installedSnapshot%2CDatpkgrConfig" title="installedSnapshot(cfg: DatpkgrConfig): InstalledSnapshot">installedSnapshot(cfg: DatpkgrConfig): InstalledSnapshot</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">installedVersionForReuse
+  <li><a class="reference" href="#installedVersionForReuse%2CDatpkgrConfig%2Cstring%2Cstring" title="installedVersionForReuse(cfg: DatpkgrConfig; name, refStr: string): string">installedVersionForReuse(cfg: DatpkgrConfig; name, refStr: string): string</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">isDevInstall
   <li><a class="reference" href="#isDevInstall%2CDatpkgrConfig%2CInstalledRecord" title="isDevInstall(cfg: DatpkgrConfig; rec: InstalledRecord): bool">isDevInstall(cfg: DatpkgrConfig; rec: InstalledRecord): bool</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">isInstalledOnDisk
+  <li><a class="reference" href="#isInstalledOnDisk%2CDatpkgrConfig%2Cstring" title="isInstalledOnDisk(cfg: DatpkgrConfig; name: string): bool">isInstalledOnDisk(cfg: DatpkgrConfig; name: string): bool</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">markInstalledRoot
+  <li><a class="reference" href="#markInstalledRoot%2CDatpkgrConfig%2Cstring%2Cstring" title="markInstalledRoot(cfg: DatpkgrConfig; name, version: string)">markInstalledRoot(cfg: DatpkgrConfig; name, version: string)</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">pathForImports
@@ -173,13 +216,45 @@
     
   </dd>
 </div>
+<div id="InstalledSnapshot">
+  <dt><pre><a href="#InstalledSnapshot"><span class="Identifier">InstalledSnapshot</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">records</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="#InstalledRecord"><span class="Identifier">InstalledRecord</span></a><span class="Other">]</span><span class="Other">]</span>
+  <span class="Identifier">depsOf</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span><span class="Other">]</span> <span class="Comment">## Package name -&gt; dependency names recorded on its rows (deduped).</span>
+  <span class="Identifier">depsOfRec</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Keyword">tuple</span><span class="Other">[</span><span class="Identifier">name</span><span class="Other">,</span> <span class="Identifier">version</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">]</span><span class="Other">]</span><span class="Other">]</span> <span class="Comment">## &quot;name@version&quot; -&gt; that row's dependency edges, versions unexpanded.</span>
+                                                               <span class="Comment">## `pruneOrphans` qualifies these with the install graph; `depsOf` is</span>
+                                                               <span class="Comment">## the name-only view used for closure walks.</span>
+  <span class="Identifier">featuresOf</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span><span class="Other">]</span> <span class="Comment">## Package name -&gt; union of the features its rows were installed with.</span>
+  <span class="Identifier">roots</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span> <span class="Comment">## &quot;name@version&quot; keys of rows flagged `root`, in table order. Versioned</span>
+                      <span class="Comment">## (not bare names) so a prune seed identifies exactly one install.</span></pre></dt>
+  <dd>
+    
+    The whole installed manifest read in a single table scan and DB scope. Prefer this over per-name lookups whenever more than a package or two is needed; see <tt class="docutils literal"><span class="pre"><span class="Identifier">installedSnapshot</span></span></tt>.
+    
+  </dd>
+</div>
 
   </dl>
 </div>
 <div class="section" id="8">
   <h1><a class="toc-backref" href="#8">Vars</a></h1>
   <dl class="item">
-    <div id="devShadowWarningsEnabled">
+    <div id="devShadowNotes">
+  <dt><pre><a href="#devShadowNotes"><span class="Identifier">devShadowNotes</span></a> <span class="Other">=</span> <span class="Identifier">initTable</span><span class="Other">(</span><span class="DecNumber">32</span><span class="Other">)</span></pre></dt>
+  <dd>
+    
+    Package name -&gt; shadow detail slice, populated while <tt class="docutils literal"><span class="pre"><span class="Identifier">devShadowNotesOnly</span></span></tt>. The detail is a slice rather than plain text so the host can render it in the color this kit picked.
+    
+  </dd>
+</div>
+<div id="devShadowNotesOnly">
+  <dt><pre><a href="#devShadowNotesOnly"><span class="Identifier">devShadowNotesOnly</span></a> <span class="Other">=</span> <span class="Identifier">false</span></pre></dt>
+  <dd>
+    
+    When set, <tt class="docutils literal"><span class="pre"><span class="Identifier">warnDevShadow</span></span></tt> records its message in <tt class="docutils literal"><span class="pre"><span class="Identifier">devShadowNotes</span></span></tt> instead of printing it, so the caller can attach the detail to a warning line it prints itself. <tt class="docutils literal"><span class="pre"><span class="Identifier">clue</span> <span class="Identifier">build</span> <span class="Operator">--</span><span class="Identifier">verbose</span></span></tt> uses this to render one warning per dependency rather than two.
+    
+  </dd>
+</div>
+<div id="devShadowWarningsEnabled">
   <dt><pre><a href="#devShadowWarningsEnabled"><span class="Identifier">devShadowWarningsEnabled</span></a> <span class="Other">=</span> <span class="Identifier">false</span></pre></dt>
   <dd>
     
@@ -196,13 +271,27 @@
     <div id="allInstalledPaths-procs-all">
   <div id="allInstalledPaths,DatpkgrConfig">
   <dt><pre><span class="Keyword">proc</span> <a href="#allInstalledPaths%2CDatpkgrConfig"><span class="Identifier">allInstalledPaths</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span>
-    <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span>
-    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">InvalidVersionError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span>
-    <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">InvalidVersionError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">InvalidVersionError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span>
+    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span>
+                                 <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
-    One <tt class="docutils literal"><span class="pre"><span class="Operator">--</span><span class="Identifier">path</span></span></tt> (install dir) per installed package — the latest version each — so <tt class="docutils literal"><span class="pre"><span class="Keyword">import</span> <span class="Identifier">xyz</span></span></tt> / <tt class="docutils literal"><span class="pre"><span class="Keyword">import</span> <span class="Identifier">pkg</span><span class="Operator">/</span><span class="Identifier">xyz</span></span></tt> resolves for any clue-installed package. One path per package avoids Nim's ambiguity error from multiple versions. Non-semver records (HEAD for tagless repos, branch pins) track moving upstream, so they rank above any fixed semver version. Without this, tagless packages (sole <tt class="docutils literal"><span class="pre"><span class="Identifier">HEAD</span></span></tt> record) vanish from every <tt class="docutils literal"><span class="pre"><span class="Operator">--</span><span class="Identifier">path</span></span></tt> list and dependents fail with <tt class="docutils literal"><span class="pre"><span class="Identifier">cannot</span> <span class="Identifier">open</span> <span class="Identifier">file</span></span></tt> even though they are installed.
+    One <tt class="docutils literal"><span class="pre"><span class="Operator">--</span><span class="Identifier">path</span></span></tt> (install dir) per installed package — the latest version each — so <tt class="docutils literal"><span class="pre"><span class="Keyword">import</span> <span class="Identifier">xyz</span></span></tt> / <tt class="docutils literal"><span class="pre"><span class="Keyword">import</span> <span class="Identifier">pkg</span><span class="Operator">/</span><span class="Identifier">xyz</span></span></tt> resolves for any clue-installed package. One path per package avoids Nim's ambiguity error from multiple versions. Non-semver records (HEAD for tagless repos, branch pins) track moving upstream, so they rank above any fixed semver version. Without this, tagless packages (sole <tt class="docutils literal"><span class="pre"><span class="Identifier">HEAD</span></span></tt> record) vanish from every <tt class="docutils literal"><span class="pre"><span class="Operator">--</span><span class="Identifier">path</span></span></tt> list and dependents fail with <tt class="docutils literal"><span class="pre"><span class="Identifier">cannot</span> <span class="Identifier">open</span> <span class="Identifier">file</span></span></tt> even though they are installed. A develop-mode checkout always wins for its package: an explicit editable source beats version ordering (rolling or semver).
+    
+  </dd>
+</div>
+
+</div>
+<div id="closureOnDisk-procs-all">
+  <div id="closureOnDisk,DatpkgrConfig,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#closureOnDisk%2CDatpkgrConfig%2Cstring"><span class="Identifier">closureOnDisk</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Every package in <tt class="docutils literal"><span class="pre"><span class="Identifier">name</span></span></tt>'s recorded closure (roots included — <tt class="docutils literal"><span class="pre"><span class="Identifier">collectInstalledDepNames</span></span></tt> returns them) has an installed-manifest row with an existing dir.
     
   </dd>
 </div>
@@ -211,14 +300,41 @@
 <div id="collectInstalledDepNames-procs-all">
   <div id="collectInstalledDepNames,DatpkgrConfig,seq[string]">
   <dt><pre><span class="Keyword">proc</span> <a href="#collectInstalledDepNames%2CDatpkgrConfig%2Cseq%5Bstring%5D"><span class="Identifier">collectInstalledDepNames</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">rootNames</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span>
-    <span class="Identifier">string</span><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span>
-                       <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span>
-                       <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span>
-              <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <span class="Identifier">string</span><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
+    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
-    BFS over the installed manifest graph to collect every reachable dependency name, so the compiler gets <tt class="docutils literal"><span class="pre"><span class="Operator">--</span><span class="Identifier">path</span></span></tt> for the whole tree.
+    BFS over the dependency graph to collect every reachable dependency name, so the compiler gets <tt class="docutils literal"><span class="pre"><span class="Operator">--</span><span class="Identifier">path</span></span></tt> for the whole tree. Develop checkouts are read live (see <tt class="docutils literal"><span class="pre"><span class="Identifier">depNamesFor</span></span></tt>); everything else walks the installed rows. Returns the whole reachable set for <em>all</em> <tt class="docutils literal"><span class="pre"><span class="Identifier">rootNames</span></span></tt> in one pass.
+    
+  </dd>
+</div>
+
+</div>
+<div id="depNamesFor-procs-all">
+  <div id="depNamesFor,DatpkgrConfig,string,seq[string]">
+  <dt><pre><span class="Keyword">proc</span> <a href="#depNamesFor%2CDatpkgrConfig%2Cstring%2Cseq%5Bstring%5D"><span class="Identifier">depNamesFor</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">recorded</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span>
+    <span class="Identifier">string</span><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
+    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    <p>The dependency names to walk for <tt class="docutils literal"><span class="pre"><span class="Identifier">name</span></span></tt>.</p>
+<p>A develop checkout is read live, because its recorded row is only a snapshot of the manifest as of the last install. Trusting that row means the closure is built from a dependency list the user has already edited: a <tt class="docutils literal"><span class="pre"><span class="Identifier">requires</span></span></tt> added since is simply absent, and the build goes on to fail on a package nobody asked for — or, once a repo and its package name diverge, to look up the repository's basename and report a package as missing while the real one sits installed.</p>
+<p>Falls back to the recorded list when the checkout yields nothing, so an unreadable manifest cannot quietly empty a closure.</p>
+
+    
+  </dd>
+</div>
+
+</div>
+<div id="developRecordPath-procs-all">
+  <div id="developRecordPath,DatpkgrConfig,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#developRecordPath%2CDatpkgrConfig%2Cstring"><span class="Identifier">developRecordPath</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    The develop checkout path for <tt class="docutils literal"><span class="pre"><span class="Identifier">name</span></span></tt> (symlink-expanded) when in develop mode, else &quot;&quot;. An explicit editable checkout beats version ordering.
     
   </dd>
 </div>
@@ -226,11 +342,9 @@
 </div>
 <div id="installedCount-procs-all">
   <div id="installedCount,DatpkgrConfig">
-  <dt><pre><span class="Keyword">proc</span> <a href="#installedCount%2CDatpkgrConfig"><span class="Identifier">installedCount</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">int</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span>
-    <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span>
-    <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span>
-    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#installedCount%2CDatpkgrConfig"><span class="Identifier">installedCount</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">int</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     
@@ -241,11 +355,9 @@
 </div>
 <div id="installedFeatures-procs-all">
   <div id="installedFeatures,DatpkgrConfig">
-  <dt><pre><span class="Keyword">proc</span> <a href="#installedFeatures%2CDatpkgrConfig"><span class="Identifier">installedFeatures</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span>
-    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#installedFeatures%2CDatpkgrConfig"><span class="Identifier">installedFeatures</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span><span class="Other">]</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     Map of installed package name -&gt; the features it was resolved with. Features are unioned across the package's install records (a develop-mode record has none, so it must not hide a registry record's features).
@@ -256,11 +368,9 @@
 </div>
 <div id="installedPath-procs-all">
   <div id="installedPath,DatpkgrConfig,string,string">
-  <dt><pre><span class="Keyword">proc</span> <a href="#installedPath%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">installedPath</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">,</span> <span class="Identifier">version</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span>
-    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#installedPath%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">installedPath</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">,</span> <span class="Identifier">version</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     The recorded <tt class="docutils literal"><span class="pre"><span class="Operator">--</span><span class="Identifier">path</span></span></tt> for an installed package version (&quot;&quot; if unknown).
@@ -271,11 +381,9 @@
 </div>
 <div id="installedRecords-procs-all">
   <div id="installedRecords,DatpkgrConfig,string">
-  <dt><pre><span class="Keyword">proc</span> <a href="#installedRecords%2CDatpkgrConfig%2Cstring"><span class="Identifier">installedRecords</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="#InstalledRecord"><span class="Identifier">InstalledRecord</span></a><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span>
-    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#installedRecords%2CDatpkgrConfig%2Cstring"><span class="Identifier">installedRecords</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="#InstalledRecord"><span class="Identifier">InstalledRecord</span></a><span class="Other">]</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     All installed records for <tt class="docutils literal"><span class="pre"><span class="Identifier">name</span></span></tt> from the installed manifest. This is the source of truth for uninstall/prune — records can exist without any files on disk (develop-mode installs point at the user's source tree).
@@ -284,16 +392,57 @@
 </div>
 
 </div>
+<div id="installedRecordsAll-procs-all">
+  <div id="installedRecordsAll,DatpkgrConfig">
+  <dt><pre><span class="Keyword">proc</span> <a href="#installedRecordsAll%2CDatpkgrConfig"><span class="Identifier">installedRecordsAll</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="#InstalledRecord"><span class="Identifier">InstalledRecord</span></a><span class="Other">]</span><span class="Other">]</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Every installed record, keyed by package name, in one table scan and one DB scope. Callers that need many packages (a dependency closure walk, a reuse check over a project's whole manifest) must take one snapshot and read from it: <tt class="docutils literal"><span class="pre"><span class="Identifier">installedRecords</span></span></tt> per name re-opens the store, replays the WAL and fsyncs on close, which dominates an install once a project has more than a handful of dependencies.
+    
+  </dd>
+</div>
+
+</div>
 <div id="installedRoots-procs-all">
   <div id="installedRoots,DatpkgrConfig">
-  <dt><pre><span class="Keyword">proc</span> <a href="#installedRoots%2CDatpkgrConfig"><span class="Identifier">installedRoots</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span>
-    <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span>
-    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#installedRoots%2CDatpkgrConfig"><span class="Identifier">installedRoots</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     Names of every installed root package (top-level <tt class="docutils literal"><span class="pre"><span class="Identifier">clue</span> <span class="Identifier">install</span></span></tt>s), in insertion order. Used by <tt class="docutils literal"><span class="pre"><span class="Identifier">clue</span> <span class="Identifier">update</span></span></tt> with no argument.
+    
+  </dd>
+</div>
+
+</div>
+<div id="installedSnapshot-procs-all">
+  <div id="installedSnapshot,DatpkgrConfig">
+  <dt><pre><span class="Keyword">proc</span> <a href="#installedSnapshot%2CDatpkgrConfig"><span class="Identifier">installedSnapshot</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">)</span><span class="Other">:</span> <a href="#InstalledSnapshot"><span class="Identifier">InstalledSnapshot</span></a> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    <p>Read the entire installed manifest once.</p>
+<p>Every per-name accessor opens the stores (taking an exclusive cross-process lock, replaying the WAL) and fsyncs them again on close, so a project with n dependencies that is inspected per name costs n store open/close cycles — the dominant cost of an install. One scan here, shared by the closure walk, the feature map, the root list and the prune sweep.</p>
+<p>Also reads each row's <tt class="docutils literal"><span class="pre"><span class="Identifier">deps</span></span></tt>/<tt class="docutils literal"><span class="pre"><span class="Identifier">features</span></span></tt> JSON once, instead of deserialising the column (<tt class="docutils literal"><span class="pre"><span class="Identifier">jsonVal</span></span></tt>) and re-parsing it (<tt class="docutils literal"><span class="pre"><span class="Identifier">parseJson</span></span></tt>) as the per-row consumers used to.</p>
+
+    
+  </dd>
+</div>
+
+</div>
+<div id="installedVersionForReuse-procs-all">
+  <div id="installedVersionForReuse,DatpkgrConfig,string,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#installedVersionForReuse%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">installedVersionForReuse</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">,</span> <span class="Identifier">refStr</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">InvalidVersionError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
+    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span>
+    <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Installed version of <tt class="docutils literal"><span class="pre"><span class="Identifier">name</span></span></tt> reusable as-is (record exists and the install dir is on disk), else &quot;&quot;. A non-empty <tt class="docutils literal"><span class="pre"><span class="Identifier">refStr</span></span></tt> (exact version, tag or branch) must match the record exactly; an empty <tt class="docutils literal"><span class="pre"><span class="Identifier">refStr</span></span></tt> returns the newest installed semver version. Rolling <tt class="docutils literal"><span class="pre"><span class="Identifier">HEAD</span></span></tt>/ref-only rows never satisfy an empty ref — they track moving upstream and must re-resolve.
     
   </dd>
 </div>
@@ -306,6 +455,34 @@
   <dd>
     
     True for develop-mode (editable) installs whose path points outside the package registry — i.e. at the user's own source tree. Such installs have no files under ~/.clue/packages; only their DB entry exists, and only the entry may ever be deleted.
+    
+  </dd>
+</div>
+
+</div>
+<div id="isInstalledOnDisk-procs-all">
+  <div id="isInstalledOnDisk,DatpkgrConfig,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#isInstalledOnDisk%2CDatpkgrConfig%2Cstring"><span class="Identifier">isInstalledOnDisk</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span>
+    <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Any installed-manifest row for <tt class="docutils literal"><span class="pre"><span class="Identifier">name</span></span></tt> whose install dir exists on disk. Matches semver rows, <tt class="docutils literal"><span class="pre"><span class="Identifier">HEAD</span></span></tt>/ref rows and develop rows alike — a db entry for an existing dir means the bits are reusable as-is.
+    
+  </dd>
+</div>
+
+</div>
+<div id="markInstalledRoot-procs-all">
+  <div id="markInstalledRoot,DatpkgrConfig,string,string">
+  <dt><pre><span class="Keyword">proc</span> <a href="#markInstalledRoot%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">markInstalledRoot</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">,</span> <span class="Identifier">version</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
+    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span>
+    <span class="Identifier">CatchableError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Promote an installed record to a root (explicitly installed) without touching files — so a package first pulled as a dep survives pruning after the user installs it directly. All other columns are preserved.
     
   </dd>
 </div>
@@ -327,13 +504,13 @@
 <div id="pruneOrphans-procs-all">
   <div id="pruneOrphans,DatpkgrConfig">
   <dt><pre><span class="Keyword">proc</span> <a href="#pruneOrphans%2CDatpkgrConfig"><span class="Identifier">pruneOrphans</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">verbose</span> <span class="Other">=</span> <span class="Identifier">true</span><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span>
-    <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span>
-    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span>
+    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
+    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
-    Remove installed packages that are no longer reachable from any root, or whose resolved version no longer matches the current dependency graph.
+    Remove installed packages that are no longer reachable from any root, or whose resolved version no longer matches the current dependency graph. Reads the manifest through one snapshot (a single table scan) and only opens the store again to delete the orphans it decides on.
     
   </dd>
 </div>
@@ -344,10 +521,10 @@
   <dt><pre><span class="Keyword">proc</span> <a href="#recordInstall%2CDatpkgrConfig%2Cstring%2Cstring%2Cseq%5BDepEntry%5D%2Cseq%5Bstring%5D%2Cstring"><span class="Identifier">recordInstall</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">,</span> <span class="Identifier">version</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span>
                    <span class="Identifier">deps</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="types.html#DepEntry"><span class="Identifier">DepEntry</span></a><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">root</span> <span class="Other">=</span> <span class="Identifier">false</span><span class="Other">;</span>
                    <span class="Identifier">features</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span> <span class="Other">=</span> <span class="Operator">@</span><span class="Other">[</span><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">installPath</span> <span class="Other">=</span> <span class="StringLit">&quot;&quot;</span><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span>
-    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span>
+    <span class="Identifier">CatchableError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span>
+    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     Record an installed package version with its resolved dependencies. <tt class="docutils literal"><span class="pre"><span class="Identifier">root</span></span></tt> marks packages the user explicitly installed (vs. pulled as deps); only roots survive pruning. <tt class="docutils literal"><span class="pre"><span class="Identifier">features</span></span></tt> are the active feature set the package was resolved with (used to emit <tt class="docutils literal"><span class="pre"><span class="Operator">-</span><span class="Identifier">d</span><span class="Punctuation">:</span><span class="Identifier">features</span><span class="Operator">.&lt;</span><span class="Identifier">pkg</span><span class="Operator">&gt;.&lt;</span><span class="Identifier">feat</span><span class="Operator">&gt;</span></span></tt>). <tt class="docutils literal"><span class="pre"><span class="Identifier">installPath</span></span></tt> is the directory the compiler gets via <tt class="docutils literal"><span class="pre"><span class="Operator">--</span><span class="Identifier">path</span></span></tt>.
@@ -371,14 +548,13 @@
 </div>
 <div id="resolveInstalledPath-procs-all">
   <div id="resolveInstalledPath,DatpkgrConfig,string,string">
-  <dt><pre><span class="Keyword">proc</span> <a href="#resolveInstalledPath%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">resolveInstalledPath</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">,</span> <span class="Identifier">preferRef</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span>
-    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">,</span> <span class="Identifier">InvalidVersionError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span>
-    <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#resolveInstalledPath%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">resolveInstalledPath</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">,</span> <span class="Identifier">preferRef</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">InvalidVersionError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span>
+    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span>
+    <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
-    The recorded <tt class="docutils literal"><span class="pre"><span class="Operator">--</span><span class="Identifier">path</span></span></tt> for an installed package, preferring the explicit ref (branch/tag) when given, else the latest semver version.
+    The recorded <tt class="docutils literal"><span class="pre"><span class="Operator">--</span><span class="Identifier">path</span></span></tt> for an installed package, preferring the explicit ref (branch/tag) when given, else the latest semver version. This is a pure lookup of what the manifest recorded: a row whose directory was removed behind our back (a <tt class="docutils literal"><span class="pre"><span class="Identifier">prune</span></span></tt>, a manual <tt class="docutils literal"><span class="pre"><span class="Identifier">rm</span> <span class="Operator">-</span><span class="Identifier">rf</span></span></tt>, a moved checkout) still resolves here. Callers that care must check the path themselves — <tt class="docutils literal"><span class="pre"><span class="Identifier">clue</span></span></tt> does, before treating a dependency as usable. A develop-mode checkout always wins unpinned lookups: an explicit editable source beats version ordering. An explicit <tt class="docutils literal"><span class="pre"><span class="Identifier">preferRef</span></span></tt> pin is still honored when it names a registry version the develop checkout does not satisfy.
     
   </dd>
 </div>
@@ -387,10 +563,10 @@
 <div id="unrecordInstall-procs-all">
   <div id="unrecordInstall,DatpkgrConfig,string,string">
   <dt><pre><span class="Keyword">proc</span> <a href="#unrecordInstall%2CDatpkgrConfig%2Cstring%2Cstring"><span class="Identifier">unrecordInstall</span></a><span class="Other">(</span><span class="Identifier">cfg</span><span class="Other">:</span> <a href="config.html#DatpkgrConfig"><span class="Identifier">DatpkgrConfig</span></a><span class="Other">;</span> <span class="Identifier">name</span><span class="Other">,</span> <span class="Identifier">version</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">CatchableError</span><span class="Other">,</span>
-    <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">JsonParsingError</span><span class="Other">,</span> <span class="Identifier">StorageError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">,</span>
-    <span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span>
-    <span class="Identifier">ExecIOEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">StoreError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">WalError</span><span class="Other">,</span>
+    <span class="Identifier">CatchableError</span><span class="Other">,</span> <span class="Identifier">OSError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ReadDirEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">,</span>
+                                     <span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">WriteDirEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     Remove an installed record (dirs removed separately by the caller).
@@ -409,7 +585,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-09-10 08:37:18 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-10-29 23:08:40 UTC</small>
       </div>
     </div>
   </div>
