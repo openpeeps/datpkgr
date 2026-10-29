@@ -1256,9 +1256,13 @@ proc updateAllPackages*(cfg: DatpkgrConfig, verbose = false, exePath = ""): bool
   result = cfg.updatePackages(roots, verbose)
 
 proc developPackage*(cfg: DatpkgrConfig, dir: string, verbose = true): bool =
-  let manifestPath = cfg.findManifestForDir(dir)
+  # Absolute from the start: the develop link lives under the home, so a
+  # relative `dir` would be stored literally and resolve against the wrong
+  # directory (a self-pointing link for ".").
+  let absDir = absolutePath(dir)
+  let manifestPath = cfg.findManifestForDir(absDir)
   if manifestPath.len == 0:
-    cfg.logError("No manifest file found in " & dir)
+    cfg.logError("No manifest file found in " & absDir)
     return false
   var manifest: Manifest
   try:
@@ -1274,10 +1278,10 @@ proc developPackage*(cfg: DatpkgrConfig, dir: string, verbose = true): bool =
   except:
     discard existsOrCreateDir(cfg.developPath())
   cfg.safeRemoveSymlink(linkPath)
-  # createSymlink target `dir` is outside driver root, so raw std/os is required
+  # createSymlink target `absDir` is outside driver root, so raw std/os is required
   # (driver.createSymlink validates target inside root via resolvePath).
   # On Windows without symlink privilege this falls back to a junction.
-  if not cfg.createDevelopLink(dir, linkPath):
+  if not cfg.createDevelopLink(absDir, linkPath):
     cfg.logError("Could not link " & linkPath & " (symlink needs admin/Developer Mode and junction fallback failed)")
     return false
   var deps: seq[types.DepEntry]
@@ -1292,7 +1296,7 @@ proc developPackage*(cfg: DatpkgrConfig, dir: string, verbose = true): bool =
         discard
   cfg.recordInstall(pkgName, version, deps, root = true,
     features = @[], installPath = linkPath)
-  cfg.logInfo("Develop-mode: " & pkgName & "@" & version & " (editable, library discovery from " & dir & ")")
+  cfg.logInfo("Develop-mode: " & pkgName & "@" & version & " (editable, library discovery from " & absDir & ")")
   true
 
 proc prunePackages*(cfg: DatpkgrConfig, verbose = true) =

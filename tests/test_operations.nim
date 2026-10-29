@@ -291,3 +291,23 @@ suite "operations — requiredManifestFile":
     check not cfg.installPackage("badpkg", url = repo, verbose = false,
       suppressSummary = true)
     check cfg.installedRecords("badpkg").len == 0
+
+suite "operations — developPackage":
+  test "a relative dir links the absolute checkout, not itself":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.initDatpkgr()
+    let base = createTempDir("datpkgr_devrel_", "")
+    defer: removeDir(base)
+    let fixture = base / "relpkg"
+    createDir(fixture)
+    writeFile(fixture / "manifest.json", "version = \"1.2.3\"\n")
+    let rel = relativePath(fixture, getCurrentDir())
+    check not isAbsolute(rel)
+    check cfg.developPackage(rel, verbose = false)
+    let link = cfg.developPath() / "manifest"
+    # A literal relative target (the old bug: ".") self-points at the
+    # develop dir, so the manifest would not resolve through the link.
+    check symlinkExists(link)
+    check fileExists(link / "manifest.json")
+    cfg.safeRemoveSymlink(link)
