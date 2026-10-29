@@ -1,4 +1,4 @@
-import std/[os, tempfiles, unittest, options, json]
+import std/[os, tempfiles, unittest, options, json, osproc, strutils]
 import datpkgr/config
 import datpkgr/operations
 import datpkgr/install
@@ -213,3 +213,81 @@ suite "operations — update helpers":
     defer: cleanupCfg(cfg)
     cfg.initDatpkgr()
     check cfg.updatePackages(@[], verbose = false)
+
+proc strictParser(content: string, path: string): Manifest =
+  ## Test parser that rejects manifests without a version line.
+  if "version =" notin content:
+    raise newException(CatchableError, path & ": missing version")
+  fakeParser(content, path)
+
+proc gitFixture(dir, args: string) =
+  let (_, code) = execCmdEx("git -C " & quoteShell(dir) & " " & args)
+  check code == 0
+
+proc makeGitRepo(base, name: string; manifest = ""): string =
+  ## Local git fixture at `base/name`, optionally carrying manifest.json.
+  result = base / name
+  createDir(result)
+  if manifest.len > 0:
+    writeFile(result / "manifest.json", manifest)
+  else:
+    writeFile(result / "readme.txt", "not a package\n")
+  discard execCmdEx("git init -q " & quoteShell(result))
+  gitFixture(result, "config user.email t@t.t")
+  gitFixture(result, "config user.name t")
+  gitFixture(result, "add -A")
+  gitFixture(result, "commit -qm init")
+
+suite "operations — requiredManifestFile":
+  test "unset (default) keeps legacy behavior and installs anything":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    check cfg.requiredManifestFile.isNone
+    cfg.manifestParser = fakeParser
+    cfg.initDatpkgr()
+    let base = createTempDir("datpkgr_req_", "")
+    defer: removeDir(base)
+    let repo = makeGitRepo(base, "pkgplain")
+    check cfg.installPackage("pkgplain", url = repo, verbose = false,
+      suppressSummary = true)
+    check cfg.installedRecords("pkgplain").len == 1
+
+  test "strict rejects a clone without the required file":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.manifestParser = fakeParser
+    cfg.requiredManifestFile = some("manifest.json")
+    cfg.initDatpkgr()
+    let base = createTempDir("datpkgr_req_", "")
+    defer: removeDir(base)
+    let repo = makeGitRepo(base, "nopkg")
+    check not cfg.installPackage("nopkg", url = repo, verbose = false,
+      suppressSummary = true)
+    check cfg.installedRecords("nopkg").len == 0
+    check not dirExists(cfg.pkgsCachePath() / "nopkg")
+
+  test "strict installs a clone carrying a valid manifest":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.manifestParser = fakeParser
+    cfg.requiredManifestFile = some("manifest.json")
+    cfg.initDatpkgr()
+    let base = createTempDir("datpkgr_req_", "")
+    defer: removeDir(base)
+    let repo = makeGitRepo(base, "manifest", "version = \"1.2.3\"\n")
+    check cfg.installPackage("manifest", url = repo, verbose = false,
+      suppressSummary = true)
+    check cfg.installedRecords("manifest").len == 1
+
+  test "strict rejects an unparseable manifest":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    cfg.manifestParser = strictParser
+    cfg.requiredManifestFile = some("manifest.json")
+    cfg.initDatpkgr()
+    let base = createTempDir("datpkgr_req_", "")
+    defer: removeDir(base)
+    let repo = makeGitRepo(base, "badpkg", "name = \"badpkg\"\n")
+    check not cfg.installPackage("badpkg", url = repo, verbose = false,
+      suppressSummary = true)
+    check cfg.installedRecords("badpkg").len == 0

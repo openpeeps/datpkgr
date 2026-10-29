@@ -4,7 +4,8 @@
 #          Made by Humans from OpenPeeps
 #          https://github.com/openpeeps/datpkgr
 
-import std/[os, osproc, strutils, tables, json, terminal, sequtils]
+import std/[os, osproc, strutils, tables, json, terminal, sequtils,
+  options]
 import pkg/flysystem
 import pkg/boogie/stores/rdbms
 import ./types
@@ -77,6 +78,13 @@ type
     manifestFinder*: ManifestFinder
     manifestFileName*: proc(pkgName: string): string
     allowSubmodules*: bool
+    requiredManifestFile*: Option[string]
+      ## When set, direct URL installs fail closed unless the `_cache`
+      ## checkout carries this manifest file at its root, and the file
+      ## must parse via `manifestParser`. `none` (default) keeps the
+      ## legacy lenient behavior. Toolchains with a fixed manifest name
+      ## (e.g. carne's `package.json`) opt in; toolchains whose manifest
+      ## name varies per package leave it off.
 
 type Config* = DatpkgrConfig
 
@@ -137,7 +145,8 @@ proc newDatpkgrConfig*(appName: string, rootPath = "", debugEnabled = false,
     manifestParser: defaultManifestParser,
     manifestFinder: defaultManifestFinder,
     manifestFileName: defaultManifestFileName,
-    allowSubmodules: allowSubmodules
+    allowSubmodules: allowSubmodules,
+    requiredManifestFile: none(string)
   )
 
 proc manifestNameForPkg*(cfg: DatpkgrConfig, pkgName: string): string =

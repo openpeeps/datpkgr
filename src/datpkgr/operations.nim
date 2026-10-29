@@ -413,29 +413,35 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
             discard cfg.clonePackage(rootMeta.url, rootDest, refresh = true)
 
     if url.len > 0 and not closureMode:
-      # Direct URL installs must point at a real package: the clone just
-      # landed in `_cache`, so require its manifest here and validate it
-      # strictly. Without this any git repo installs (empty-manifest
-      # fallback further down would happily copy it).
+      # Opt-in strictness (see `requiredManifestFile`): the clone just
+      # landed in `_cache`, so require the manifest file and validate it
+      # through the toolchain parser. Unset keeps the legacy lenient
+      # behavior for toolchains without a fixed manifest name.
+      if cfg.requiredManifestFile.isSome:
+        let reqName = cfg.requiredManifestFile.get()
+        let reqPath = rootDest / reqName
+        var hasReq = false
+        try: hasReq = cfg.driver.exists(relativePath(reqPath, cfg.rootPath))
+        except: hasReq = fileExists(reqPath)
+        if not hasReq:
+          try: cfg.driver.deleteDir(relativePath(rootDest, cfg.rootPath), force = true)
+          except:
+            try: removeDir(rootDest) except: discard
+          fail("Cloned " & rootMeta.url & " but found no " & reqName &
+            " — not a package")
+          return false
+        try:
+          let content =
+            try: cfg.driver.read(relativePath(reqPath, cfg.rootPath))
+            except: readFile(reqPath)
+          discard cfg.parseManifest(content, reqPath)
+        except CatchableError as e:
+          try: cfg.driver.deleteDir(relativePath(rootDest, cfg.rootPath), force = true)
+          except:
+            try: removeDir(rootDest) except: discard
+          fail("Invalid " & reqName & " in " & rootMeta.url & ": " & e.msg)
+          return false
       let nf = cfg.findManifestInDir(rootDest)
-      if nf.len == 0:
-        try: cfg.driver.deleteDir(relativePath(rootDest, cfg.rootPath), force = true)
-        except:
-          try: removeDir(rootDest) except: discard
-        fail("Cloned " & rootMeta.url & " but found no " &
-          cfg.manifestNameForPkg(curName) & " — not a package")
-        return false
-      try:
-        let content =
-          try: cfg.driver.read(relativePath(nf, cfg.rootPath))
-          except: readFile(nf)
-        discard cfg.parseManifest(content, nf)
-      except CatchableError as e:
-        try: cfg.driver.deleteDir(relativePath(rootDest, cfg.rootPath), force = true)
-        except:
-          try: removeDir(rootDest) except: discard
-        fail("Invalid manifest in " & rootMeta.url & ": " & e.msg)
-        return false
       if nf.len > 0:
         let canonical = manifestCanonicalName(cfg, nf)
         if canonical.len > 0 and canonical != curName:
