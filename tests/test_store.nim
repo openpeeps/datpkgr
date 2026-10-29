@@ -179,3 +179,36 @@ suite "store — withDatpkgrDB":
     # usable again after the failure
     cfg.withDatpkgrDB do:
       check cfg.stores.initialized
+
+suite "store — forge aliases":
+  test "expandForgeAlias known aliases":
+    check expandForgeAlias("gh:Araq/iconbundler") ==
+      "https://github.com/Araq/iconbundler"
+    check expandForgeAlias("github:nimbase/nbrotli") ==
+      "https://github.com/nimbase/nbrotli"
+    check expandForgeAlias("gl:group/sub/repo") ==
+      "https://gitlab.com/group/sub/repo"
+    check expandForgeAlias("cb:user/repo") == "https://codeberg.org/user/repo"
+    check expandForgeAlias("srht:user/repo") == "https://git.sr.ht/~user/repo"
+
+  test "expandForgeAlias rejects unknown or malformed input":
+    expect ValueError:
+      discard expandForgeAlias("gitea:user/repo")
+    expect ValueError:
+      discard expandForgeAlias("gh:lonely")
+    expect ValueError:
+      discard expandForgeAlias("nocolon")
+
+  test "isForgeAliasShape guards":
+    check isForgeAliasShape("gh:user/repo")
+    check not isForgeAliasShape("https://github.com/user/repo")
+    check not isForgeAliasShape("git@github.com:user/repo")
+    check not isForgeAliasShape("owner/repo")
+    check not isForgeAliasShape("")
+
+  test "canonicalNameForAlias ignores non-aliases and bad shapes":
+    let cfg = tempCfg()
+    defer: cleanupCfg(cfg)
+    check cfg.canonicalNameForAlias("plainname") == ""
+    check cfg.canonicalNameForAlias("gh:lonely") == ""
+    check cfg.canonicalNameForAlias("") == ""

@@ -626,7 +626,11 @@ proc headVersion*(cfg: DatpkgrConfig, name: string): Version =
   newVersion(0, 0, 0)
 
 const
-  depsCacheVersion = 6
+  depsCacheVersion = 7
+  ## Bumped when the manifest parsers change what a `requires` entry
+  ## resolves to (v7: forge shorthands like `gh:user/repo` expand to https
+  ## URLs at parse time). Older rows re-parse instead of serving stale
+  ## names into the resolver.
 
 type
   CachedDeps = object

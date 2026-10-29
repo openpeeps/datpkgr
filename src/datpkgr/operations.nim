@@ -26,23 +26,6 @@ import ./resolver
 # helpers (from manager.nim)
 # ----------------------------------------------------------------------
 
-proc pkgNameFromUrl*(url: string): string =
-  var u = url.strip()
-  for sep in ['#', '?']:
-    let pos = u.find(sep)
-    if pos >= 0:
-      u = u[0 ..< pos]
-  if u.startsWith("git+"):
-    u = u[4 .. ^1]
-  u = u.replace("://", "/")
-  u = u.replace("git@", "")
-  u = u.replace(":", "/")
-  for part in u.split('/'):
-    if part.len > 0:
-      result = part
-  if result.endsWith(".git"):
-    result = result[0 ..< ^4]
-
 proc depName*(d: PkgDependency): string =
   if d.name.len > 0: d.name
   elif d.url.len > 0: pkgNameFromUrl(d.url)
@@ -430,7 +413,29 @@ proc installPackage*(cfg: DatpkgrConfig, pkgName: string, pkgRef: string = "",
             discard cfg.clonePackage(rootMeta.url, rootDest, refresh = true)
 
     if url.len > 0 and not closureMode:
+      # Direct URL installs must point at a real package: the clone just
+      # landed in `_cache`, so require its manifest here and validate it
+      # strictly. Without this any git repo installs (empty-manifest
+      # fallback further down would happily copy it).
       let nf = cfg.findManifestInDir(rootDest)
+      if nf.len == 0:
+        try: cfg.driver.deleteDir(relativePath(rootDest, cfg.rootPath), force = true)
+        except:
+          try: removeDir(rootDest) except: discard
+        fail("Cloned " & rootMeta.url & " but found no " &
+          cfg.manifestNameForPkg(curName) & " — not a package")
+        return false
+      try:
+        let content =
+          try: cfg.driver.read(relativePath(nf, cfg.rootPath))
+          except: readFile(nf)
+        discard cfg.parseManifest(content, nf)
+      except CatchableError as e:
+        try: cfg.driver.deleteDir(relativePath(rootDest, cfg.rootPath), force = true)
+        except:
+          try: removeDir(rootDest) except: discard
+        fail("Invalid manifest in " & rootMeta.url & ": " & e.msg)
+        return false
       if nf.len > 0:
         let canonical = manifestCanonicalName(cfg, nf)
         if canonical.len > 0 and canonical != curName:

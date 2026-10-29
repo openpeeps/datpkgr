@@ -366,7 +366,17 @@ proc depNamesFor*(cfg: DatpkgrConfig, name: string,
         seen.incl(dn)
         result.add(dn)
   if result.len == 0:
-    result = recorded
+    # No develop checkout: walk the recorded list as-is, except for
+    # forge-shorthand names (`gh:user/repo`) recorded before parsers
+    # expanded shorthand — those resolve through the registry / cached
+    # manifest here so old rows heal instead of walking a raw alias.
+    for rn in recorded:
+      if isForgeAliasShape(rn):
+        let canon = cfg.canonicalNameForAlias(rn)
+        if canon.len > 0:
+          result.add(canon)
+          continue
+      result.add(rn)
 
 proc collectInstalledDepNames*(cfg: DatpkgrConfig, rootNames: seq[string]): seq[string] =
   ## BFS over the dependency graph to collect every reachable dependency name,

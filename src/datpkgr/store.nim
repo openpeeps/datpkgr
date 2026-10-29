@@ -715,6 +715,66 @@ proc fetchAllPkgMetas*(cfg: DatpkgrConfig, pkgName: string): seq[PkgRef] =
     for (_, row) in cfg.stores.db.getTable("packages").get().where("name", newTextValue(pkgName)).toSeq():
       result.add(PkgRef(name: pkgName, url: row["url"].strVal, refStr: ""))
 
+proc expandForgeAlias*(s: string): string =
+  ## Expand `alias:user/repo` shorthand to a canonical https URL.
+  ## Known aliases: `github`/`gh`, `gitlab`/`gl`, `codeberg`/`cb`/`cberg`,
+  ## `sourcehut`/`srht` (a missing `~` is auto-prefixed for sourcehut, as in
+  ## nimble). Raises ValueError on unknown aliases or malformed input.
+  let input = s.strip()
+  let colonPos = input.find(':')
+  if colonPos <= 0:
+    raise newException(ValueError,
+      "Invalid forge alias (expected alias:user/repo): " & s)
+  let alias = input[0 ..< colonPos].toLowerAscii()
+  var rest = input[colonPos + 1 .. ^1].strip(chars = {'/'})
+  let host =
+    case alias
+    of "github", "gh": "github.com"
+    of "gitlab", "gl": "gitlab.com"
+    of "codeberg", "cb", "cberg": "codeberg.org"
+    of "sourcehut", "srht": "git.sr.ht"
+    else: raise newException(ValueError, "Unknown forge alias '" & alias &
+      "'. Known aliases: github (gh), gitlab (gl), codeberg (cb), sourcehut (srht).")
+  if rest.len == 0 or '/' notin rest:
+    raise newException(ValueError,
+      "Invalid forge alias (expected alias:user/repo): " & s)
+  if host == "git.sr.ht" and not rest.startsWith('~'):
+    rest = '~' & rest
+  "https://" & host & "/" & rest
+
+proc isForgeAliasShape*(s: string): bool =
+  ## True when `s` looks like `alias:path` shorthand: exactly one colon, no
+  ## `://`, and no `@` before the colon (scp-like `user@host:path` is a URL,
+  ## not an alias — this ordering guard is what keeps the two apart).
+  let input = s.strip()
+  if "://" in input:
+    return false
+  let colonPos = input.find(':')
+  if colonPos <= 0:
+    return false
+  if ':' in input[colonPos + 1 .. ^1]:
+    return false
+  if '@' in input[0 ..< colonPos]:
+    return false
+  true
+
+proc pkgNameFromUrl*(url: string): string =
+  var u = url.strip()
+  for sep in ['#', '?']:
+    let pos = u.find(sep)
+    if pos >= 0:
+      u = u[0 ..< pos]
+  if u.startsWith("git+"):
+    u = u[4 .. ^1]
+  u = u.replace("://", "/")
+  u = u.replace("git@", "")
+  u = u.replace(":", "/")
+  for part in u.split('/'):
+    if part.len > 0:
+      result = part
+  if result.endsWith(".git"):
+    result = result[0 ..< ^4]
+
 proc normalizeRepoUrl*(url: string): string =
   ## Reduce a repository URL to a comparable key: no scheme, no `.git`, no
   ## trailing slash, lowercased. A registry stores one canonical spelling while
@@ -754,6 +814,48 @@ proc pkgNameForUrl*(cfg: DatpkgrConfig, url: string,
         continue
       return row["name"].strVal
   ""
+
+proc canonicalNameForAlias*(cfg: DatpkgrConfig, name: string): string =
+  ## Resolve a forge-shorthand name (`gh:user/repo`) left behind in rows
+  ## cached or recorded before parsers expanded shorthand (or by a parser
+  ## that never did). Registry first, then the cached checkout's manifest,
+  ## else the repo basename — offline-safe, never clones. Returns "" when
+  ## `name` is not alias-shaped or nothing resolves.
+  if not isForgeAliasShape(name):
+    return ""
+  var url = ""
+  try: url = expandForgeAlias(name)
+  except ValueError: return ""
+  if url.len == 0:
+    return ""
+  let reg =
+    try: cfg.pkgNameForUrl(url)
+    except CatchableError: ""
+  if reg.len > 0:
+    return reg
+  var guessed = pkgNameFromUrl(url)
+  if guessed.len == 0:
+    return ""
+  let cacheDir = cfg.pkgsCachePath() / guessed
+  var hasCache = false
+  try: hasCache = cfg.driver.exists(relativePath(cacheDir, cfg.rootPath))
+  except: hasCache = dirExists(cacheDir)
+  if hasCache:
+    let mf = cfg.findManifestInDir(cacheDir)
+    if mf.len > 0:
+      try:
+        let content =
+          try: cfg.driver.read(relativePath(mf, cfg.rootPath))
+          except: readFile(mf)
+        let m = cfg.parseManifest(content, mf)
+        if m.name.len > 0:
+          return m.name
+      except CatchableError:
+        discard
+      let stem = mf.extractFilename.changeFileExt("")
+      if stem.len > 0 and stem != "manifest":
+        return stem
+  guessed
 
 proc readDevelopManifest*(cfg: DatpkgrConfig, name: string): Option[Manifest] =
   ## The develop checkout's manifest, read right now. None when there is no

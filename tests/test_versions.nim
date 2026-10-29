@@ -147,8 +147,8 @@ suite "versions — getDeps caching":
     let cfg = tempCfg()
     defer: cleanupCfg(cfg)
     cfg.initDatpkgr()
-    # manually seed deps cache with version 6 format
-    let depsJson = %*{"v": 6, "hard": [%*{"name": "depA", "url": "", "branch": "", "constraint": "*", "isToolchain": false}], "features": {}, "dev": []}
+    # manually seed deps cache with the current version format
+    let depsJson = %*{"v": 7, "hard": [%*{"name": "depA", "url": "", "branch": "", "constraint": "*", "isToolchain": false}], "features": {}, "dev": []}
     cfg.withDatpkgrDB do:
       discard cfg.stores.versionsDB.insertRow("deps", row({
         "name": newTextValue("mypkg"),
