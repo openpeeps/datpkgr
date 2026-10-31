@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://openpeeps.github.io/datpkgr">API reference</a><br>
-  <img src="https://github.com/openpeeps/pistachio/workflows/test/badge.svg" alt="Github Actions">  <img src="https://github.com/openpeeps/pistachio/workflows/docs/badge.svg" alt="Github Actions">
+  <img src="https://github.com/openpeeps/datpkgr/workflows/test/badge.svg" alt="Github Actions">  <img src="https://github.com/openpeeps/datpkgr/workflows/docs/badge.svg" alt="Github Actions">
 </p>
 
 ## Overview
