@@ -16,14 +16,14 @@ nim	withDatpkgrDB	datpkgr/store.html#withDatpkgrDB.t,DatpkgrConfig,untyped	templ
 nim	refreshSource	datpkgr/store.html#refreshSource,DatpkgrConfig,string	proc refreshSource(cfg: DatpkgrConfig; sourceName: string): bool		564
 nim	refreshAllSources	datpkgr/store.html#refreshAllSources,DatpkgrConfig	proc refreshAllSources(cfg: DatpkgrConfig): bool		629
 nim	refreshRegistry	datpkgr/store.html#refreshRegistry,DatpkgrConfig	proc refreshRegistry(cfg: DatpkgrConfig): bool		639
-nim	isDevelopAvailable	datpkgr/store.html#isDevelopAvailable,DatpkgrConfig,string	proc isDevelopAvailable(cfg: DatpkgrConfig; pkgName: string): bool		669
-nim	fetchPkgMeta	datpkgr/store.html#fetchPkgMeta,DatpkgrConfig,string,string	proc fetchPkgMeta(cfg: DatpkgrConfig; pkgName: string; sourceFilter: string = ""): Option[\n    PkgRef]		678
-nim	fetchAllPkgMetas	datpkgr/store.html#fetchAllPkgMetas,DatpkgrConfig,string	proc fetchAllPkgMetas(cfg: DatpkgrConfig; pkgName: string): seq[PkgRef]		713
-nim	expandForgeAlias	datpkgr/store.html#expandForgeAlias,string	proc expandForgeAlias(s: string): string		718
-nim	isForgeAliasShape	datpkgr/store.html#isForgeAliasShape,string	proc isForgeAliasShape(s: string): bool		745
-nim	pkgNameFromUrl	datpkgr/store.html#pkgNameFromUrl,string	proc pkgNameFromUrl(url: string): string		761
-nim	normalizeRepoUrl	datpkgr/store.html#normalizeRepoUrl,string	proc normalizeRepoUrl(url: string): string		778
-nim	pkgNameForUrl	datpkgr/store.html#pkgNameForUrl,DatpkgrConfig,string,string	proc pkgNameForUrl(cfg: DatpkgrConfig; url: string; sourceFilter: string = ""): string		795
-nim	canonicalNameForAlias	datpkgr/store.html#canonicalNameForAlias,DatpkgrConfig,string	proc canonicalNameForAlias(cfg: DatpkgrConfig; name: string): string		818
-nim	readDevelopManifest	datpkgr/store.html#readDevelopManifest,DatpkgrConfig,string	proc readDevelopManifest(cfg: DatpkgrConfig; name: string): Option[Manifest]		860
-nim	toolchainDep	datpkgr/store.html#toolchainDep,DatpkgrConfig,PkgDependency	proc toolchainDep(cfg: DatpkgrConfig; d: PkgDependency): bool		882
+nim	isDevelopAvailable	datpkgr/store.html#isDevelopAvailable,DatpkgrConfig,string	proc isDevelopAvailable(cfg: DatpkgrConfig; pkgName: string): bool		678
+nim	fetchPkgMeta	datpkgr/store.html#fetchPkgMeta,DatpkgrConfig,string,string	proc fetchPkgMeta(cfg: DatpkgrConfig; pkgName: string; sourceFilter: string = ""): Option[\n    PkgRef]		687
+nim	fetchAllPkgMetas	datpkgr/store.html#fetchAllPkgMetas,DatpkgrConfig,string	proc fetchAllPkgMetas(cfg: DatpkgrConfig; pkgName: string): seq[PkgRef]		722
+nim	expandForgeAlias	datpkgr/store.html#expandForgeAlias,string	proc expandForgeAlias(s: string): string		727
+nim	isForgeAliasShape	datpkgr/store.html#isForgeAliasShape,string	proc isForgeAliasShape(s: string): bool		754
+nim	pkgNameFromUrl	datpkgr/store.html#pkgNameFromUrl,string	proc pkgNameFromUrl(url: string): string		770
+nim	normalizeRepoUrl	datpkgr/store.html#normalizeRepoUrl,string	proc normalizeRepoUrl(url: string): string		787
+nim	pkgNameForUrl	datpkgr/store.html#pkgNameForUrl,DatpkgrConfig,string,string	proc pkgNameForUrl(cfg: DatpkgrConfig; url: string; sourceFilter: string = ""): string		804
+nim	canonicalNameForAlias	datpkgr/store.html#canonicalNameForAlias,DatpkgrConfig,string	proc canonicalNameForAlias(cfg: DatpkgrConfig; name: string): string		827
+nim	readDevelopManifest	datpkgr/store.html#readDevelopManifest,DatpkgrConfig,string	proc readDevelopManifest(cfg: DatpkgrConfig; name: string): Option[Manifest]		869
+nim	toolchainDep	datpkgr/store.html#toolchainDep,DatpkgrConfig,PkgDependency	proc toolchainDep(cfg: DatpkgrConfig; d: PkgDependency): bool		891
