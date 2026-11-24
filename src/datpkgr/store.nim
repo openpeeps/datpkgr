@@ -665,6 +665,15 @@ proc closeDatpkgr*(cfg: DatpkgrConfig) =
     cfg.stores.versionsDB.close()
   except CatchableError:
     discard
+  # Drop the closed handles: the next scope must create fresh stores.
+  # Besides releasing memory, this keeps each store's whole refcount
+  # lifecycle on the thread that opened it. ORC's cycle registry is
+  # per-thread while a cell carries a single root index, so destroying
+  # another thread's cycle-registered store here (via the next open's
+  # field overwrite) corrupts the destroying thread's cycle list and
+  # segfaults under thread contention (carne http workers).
+  cfg.stores.db = nil
+  cfg.stores.versionsDB = nil
 
 proc isDevelopAvailable*(cfg: DatpkgrConfig, pkgName: string): bool =
   ## True if pkgName is available as develop (symlink). Driver-only to avoid circular import with install.
